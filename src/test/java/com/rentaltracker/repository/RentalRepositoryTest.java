@@ -17,6 +17,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.rentaltracker.domain.RentalDomain;
 import com.rentaltracker.domain.enums.RentalStatus;
+import com.rentaltracker.domain.view.ActiveRentalView;
 import com.rentaltracker.infrastructure.Database;
 import com.rentaltracker.repository.exception.ConstraintViolationException;
 import com.rentaltracker.repository.exception.ConstraintViolationException.Type;
@@ -43,7 +44,7 @@ class RentalRepositoryTest {
         exec("INSERT INTO users (username) VALUES ('liisa'), ('meelis'), ('marili')");
         // items 1-3 belong to user 1, item 4 belongs to user 3
         exec("INSERT INTO listed_items (owner_id, item_name, description, cost_per_day) VALUES "
-           + "(1, 'Ladder', 'x', 5), (1, 'Drill', 'x', 4), (1, 'Tent', 'x', 8), (3, 'Saw', 'x', 6)");
+                + "(1, 'Ladder', 'x', 5), (1, 'Drill', 'x', 4), (1, 'Tent', 'x', 8), (3, 'Saw', 'x', 6)");
     }
 
     @AfterEach
@@ -147,7 +148,7 @@ class RentalRepositoryTest {
     void findByIdOnUnparseableRowThrowsMappingException() throws SQLException {
         // Plain SQL can store anything the CHECKs allow, so write a bad time directly
         exec("INSERT INTO rentals (item_id, renter_id, start_time, end_time) "
-           + "VALUES (1, 2, 'garbage', 'zzzz')");
+                + "VALUES (1, 2, 'garbage', 'zzzz')");
 
         assertThrows(MappingException.class, () -> rentals.findById(1));
     }
@@ -249,10 +250,112 @@ class RentalRepositoryTest {
     @Test
     void foreignKeysAreEnabled(@TempDir Path dir) throws SQLException {
         try (Database db = new Database(dir.resolve("t.db").toString());
-            Statement st = db.connection().createStatement();
-            ResultSet rs = st.executeQuery("PRAGMA foreign_keys")) {
+             Statement st = db.connection().createStatement();
+             ResultSet rs = st.executeQuery("PRAGMA foreign_keys")) {
             rs.next();
             assertEquals(1, rs.getInt(1));
         }
+    }
+
+    // =====================================================================
+    // findActiveViewsByOwner / mapView
+    // =====================================================================
+
+    @Test
+    void findActiveViewsByOwnerProjectsItemNameAndRenterName() {
+        long id = insertRental(1, 2, START, END); // item 1 = 'Ladder', owner 1; renter 2 = 'meelis'
+
+        List<ActiveRentalView> views = rentals.findActiveViewsByOwner(1);
+
+        assertEquals(1, views.size());
+        ActiveRentalView v = views.get(0);
+        assertEquals(id, v.rentalId());
+        assertEquals("Ladder", v.itemName());
+        assertEquals("meelis", v.renterUsername());
+        assertEquals(START, v.startTime());
+        assertEquals(END, v.endTime());
+        assertEquals(RentalStatus.ACTIVE, v.status());
+    }
+
+    @Test
+    void findActiveViewsByOwnerSortsByEndTimeAndSkipsClosedAndOtherOwners() {
+        long later  = insertRental(1, 2, START, LocalDateTime.of(2026, 6, 25, 10, 0)); // 'Ladder'
+        long sooner = insertRental(2, 2, START, LocalDateTime.of(2026, 6, 18, 10, 0)); // 'Drill'
+        long closed = insertRental(3, 2, START, END);                                  // 'Tent'
+        rentals.close(closed, LocalDateTime.of(2026, 6, 17, 9, 0));
+        insertRental(4, 2, START, END);                                                // 'Saw', owner 3
+
+        List<ActiveRentalView> views = rentals.findActiveViewsByOwner(1);
+
+        assertEquals(List.of(sooner, later),
+                views.stream().map(ActiveRentalView::rentalId).toList());
+        assertEquals(List.of("Drill", "Ladder"),
+                views.stream().map(ActiveRentalView::itemName).toList());
+    }
+
+    @Test
+    void findActiveViewsByOwnerIsEmptyWhenNothingIsOut() {
+        assertTrue(rentals.findActiveViewsByOwner(1).isEmpty());
+    }
+
+    @Test
+    void findActiveViewsByOwnerReturnsEmptyForUnknownOwner() {
+        assertTrue(rentals.findActiveViewsByOwner(999).isEmpty());
+    }
+
+    @Test
+    void findActiveViewsByOwnerUsesRenterNameNotItemOwnerName() {
+        // renter is user 2 ('meelis'), owner is user 1 ('liisa'); the view must show the renter.
+        insertRental(1, 2, START, END);
+
+        ActiveRentalView v = rentals.findActiveViewsByOwner(1).get(0);
+
+        assertEquals("meelis", v.renterUsername());
+        assertNotEquals("liisa", v.renterUsername());
+    }
+
+    @Test
+    void findActiveViewsByOwnerOnUnparseableRowThrowsMappingException() throws SQLException {
+        // Bypass the app layer, write a bad time directly; mapView should wrap it.
+        exec("INSERT INTO rentals (item_id, renter_id, start_time, end_time) "
+                + "VALUES (1, 2, 'garbage', 'zzzz')");
+
+        assertThrows(MappingException.class, () -> rentals.findActiveViewsByOwner(1));
+    }
+
+    // =====================================================================
+    // Catch blocks: a raw SQLException becomes a RepositoryException
+    // (the specific translator subtype is covered by the constraint tests above)
+    // =====================================================================
+
+    @Test
+    void findByIdOnClosedDatabaseThrowsRepositoryException() {
+        db.close();
+        assertThrows(RepositoryException.class, () -> rentals.findById(1));
+    }
+
+    @Test
+    void findActiveByOwnerOnClosedDatabaseThrowsRepositoryException() {
+        db.close();
+        assertThrows(RepositoryException.class, () -> rentals.findActiveByOwner(1));
+    }
+
+    @Test
+    void findActiveByItemOnClosedDatabaseThrowsRepositoryException() {
+        db.close();
+        assertThrows(RepositoryException.class, () -> rentals.findActiveByItem(1));
+    }
+
+    @Test
+    void findActiveViewsByOwnerOnClosedDatabaseThrowsRepositoryException() {
+        db.close();
+        assertThrows(RepositoryException.class, () -> rentals.findActiveViewsByOwner(1));
+    }
+
+    @Test
+    void closeOnClosedDatabaseThrowsRepositoryException() {
+        db.close();
+        assertThrows(RepositoryException.class,
+                () -> rentals.close(1, LocalDateTime.of(2026, 6, 18, 9, 5)));
     }
 }
