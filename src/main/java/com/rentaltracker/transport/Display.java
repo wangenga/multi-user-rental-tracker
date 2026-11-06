@@ -15,4 +15,8 @@ public final class Display {
     public static String row(String label, Object value) {
         return String.format("%-14s %s", label, value);
     }
+
+    public static String orDash(String text) {
+        return text == null || text.isBlank() ? "-" : text;
+    }
 }

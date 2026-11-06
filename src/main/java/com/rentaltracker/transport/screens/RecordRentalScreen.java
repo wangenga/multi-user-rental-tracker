@@ -41,7 +41,7 @@ public class RecordRentalScreen {
     private void rent(ItemDomain item) {
         prompter.println();
         prompter.println("=== " + item.getItemName() + " ===");
-        prompter.println(Display.row("description", item.getDescription()));
+        prompter.println(Display.row("description", Display.orDash(item.getDescription())));
         prompter.println(Display.row("cost per day", item.getCostPerDay()));
         prompter.println("1) Rent this item");
         prompter.println("2) Back to list");

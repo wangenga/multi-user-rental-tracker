@@ -46,7 +46,7 @@ public class InventoryScreen {
 
         prompter.println();
         prompter.println("=== " + item.getItemName() + " ===");
-        prompter.println(Display.row("description", item.getDescription()));
+        prompter.println(Display.row("description", Display.orDash(item.getDescription())));
         prompter.println(Display.row("cost per day", item.getCostPerDay()));
         prompter.println(Display.row("status", item.getStatus()));
         prompter.println(Display.row("owner", detail.ownerUsername()));
