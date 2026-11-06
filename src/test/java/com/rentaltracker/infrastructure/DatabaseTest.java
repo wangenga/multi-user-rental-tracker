@@ -13,7 +13,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.rentaltracker.repository.exception.DatabaseConnectionException;
-import com.rentaltracker.repository.exception.RepositoryException;
 
 class DatabaseTest {
 

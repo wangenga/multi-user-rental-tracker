@@ -1,147 +1,207 @@
 package com.rentaltracker.transport.screens;
 
-import com.rentaltracker.domain.ItemDomain;
-import com.rentaltracker.domain.RentalDomain;
-import com.rentaltracker.service.RentalService;
-import com.rentaltracker.service.exception.BusinessRuleException;
-import com.rentaltracker.transport.Prompter;
-import org.junit.jupiter.api.Test;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
-import java.util.List;
+import java.nio.file.Path;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import com.rentaltracker.infrastructure.Database;
+import com.rentaltracker.repository.ItemRepository;
+import com.rentaltracker.repository.RentalRepository;
+import com.rentaltracker.repository.SqliteTransactor;
+import com.rentaltracker.repository.UserRepository;
+import com.rentaltracker.service.RentalService;
+import com.rentaltracker.service.UserService;
+import com.rentaltracker.transport.Display;
+import com.rentaltracker.transport.Prompter;
+import com.rentaltracker.transport.exception.InputClosedException;
 
 class RecordRentalScreenTest {
 
-    private Prompter prompter(String input, ByteArrayOutputStream out) {
-        return new Prompter(
-                new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)),
-                new PrintStream(out, true, StandardCharsets.UTF_8));
+    static final Clock CLOCK = Clock.fixed(Instant.parse("2026-06-16T14:30:45Z"), ZoneId.of("UTC"));
+
+    @TempDir Path tempDir;
+    Database db;
+    RentalService rentals;
+    final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+
+    @BeforeEach
+    void setUp() throws SQLException {
+        db = new Database(tempDir.resolve("test.db").toString());
+        rentals = new RentalService(new ItemRepository(db.connection()), new RentalRepository(db),
+                new UserService(new UserRepository(db)), new SqliteTransactor(db), CLOCK);
+        exec("INSERT INTO users (username) VALUES ('liisa'), ('meelis')");   // 1 owner, 2 renter
     }
 
-    private ItemDomain item() {
-        // adapt to your ItemDomain shape
-        return mock(ItemDomain.class,
-                withSettings().stubOnly());
+    @AfterEach
+    void tearDown() { db.close(); }
+
+    private RecordRentalScreen screen(String input) {
+        Prompter prompter = new Prompter(new ByteArrayInputStream(input.getBytes(UTF_8)),
+                new PrintStream(buffer, true, UTF_8));
+        return new RecordRentalScreen(prompter, rentals);
+    }
+
+    private String output() { return buffer.toString(UTF_8); }
+
+    private void exec(String sql) throws SQLException {
+        try (Statement st = db.connection().createStatement()) { st.execute(sql); }
+    }
+
+    private String query(String sql) throws SQLException {
+        try (Statement st = db.connection().createStatement();
+             ResultSet rs = st.executeQuery(sql)) {
+            rs.next();
+            return rs.getString(1);
+        }
+    }
+
+    private long addItem(String name, String status) throws SQLException {
+        exec("INSERT INTO listed_items (owner_id, item_name, description, cost_per_day, status) "
+           + "VALUES (1, '" + name + "', '6-step ladder', 5, '" + status + "')");
+        return Long.parseLong(query("SELECT last_insert_rowid()"));
+    }
+
+    private String rentalCount() throws SQLException { return query("SELECT count(*) FROM rentals"); }
+
+    @Test
+    void anEmptyListSaysSoAndNeverAsksForInput() {
+        screen("").run(1);
+
+        assertTrue(output().contains("No items are available to rent."));
     }
 
     @Test
-    void emptyAvailableList_doesNotPrompt() throws Exception {
-        RentalService rentals = mock(RentalService.class);
-        when(rentals.getRentableItems(1)).thenReturn(List.of());
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
+    void onlyAvailableItemsAreListedWithTheirCost() throws SQLException {
+        addItem("Ladder", "available");
+        addItem("Drill", "rented");
+        addItem("Tent", "unlisted");
 
-        new RecordRentalScreen(prompter("", out), rentals).run(1);
+        screen("2\n").run(1);   // one row, so Back is 2
 
-        verify(rentals, never()).recordRental(anyInt(), anyString(), anyInt());
+        assertTrue(output().contains("1) " + Display.row("Ladder", "5 per day")));
+        assertFalse(output().contains("Drill"));
+        assertFalse(output().contains("Tent"));
     }
 
     @Test
-    void backFromList_exits() throws Exception {
-        RentalService rentals = mock(RentalService.class);
-        when(rentals.getRentableItems(1)).thenReturn(List.of(item()));
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
+    void theDetailViewShowsTheItemAndTheRentOption() throws SQLException {
+        addItem("Ladder", "available");
 
-        new RecordRentalScreen(prompter("b\n", out), rentals).run(1);
+        screen("1\n2\n2\n").run(1);   // open it, back to the list, back to the menu
 
-        verify(rentals, never()).recordRental(anyInt(), anyString(), anyInt());
+        assertTrue(output().contains("=== Ladder ==="));
+        assertTrue(output().contains("6-step ladder"));
+        assertTrue(output().contains("1) Rent this item"));
+        assertTrue(output().contains("2) Back to list"));
     }
 
     @Test
-    void backFromDetail_doesNotRecord() throws Exception {
-        RentalService rentals = mock(RentalService.class);
-        when(rentals.getRentableItems(1)).thenReturn(List.of(item()));
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
+    void aBlankDescriptionIsShownAsADash() throws SQLException {
+        exec("INSERT INTO listed_items (owner_id, item_name, description, cost_per_day) "
+           + "VALUES (1, 'Ladder', '', 5)");
 
-        // pick item 1, then "2) Back to list", then "b"
-        new RecordRentalScreen(prompter("1\n2\nb\n", out), rentals).run(1);
+        screen("1\n2\n2\n").run(1);
 
-        verify(rentals, never()).recordRental(anyInt(), anyString(), anyInt());
+        assertTrue(output().contains(Display.row("description", "-")));
     }
 
     @Test
-    void happyPath_recordsAndPrintsEndTime() throws Exception {
-        RentalService rentals = mock(RentalService.class);
-        ItemDomain it = item();
-        when(it.getItemId()).thenReturn(7);
-        when(it.getItemName()).thenReturn("Drill");
-        when(it.getDescription()).thenReturn("18V cordless");
-        when(it.getCostPerDay()).thenReturn((int) 5.0);
-        when(rentals.getRentableItems(1)).thenReturn(List.of(it));
+    void goingBackFromTheDetailRecordsNothing() throws SQLException {
+        long id = addItem("Ladder", "available");
 
-        RentalDomain rented = mock(RentalDomain.class);
-        LocalDateTime end = LocalDateTime.of(2025, 1, 5, 12, 0);
-        when(rented.endTime()).thenReturn(end);
-        when(rentals.recordRental(7, "alice", 3)).thenReturn(rented);
+        screen("1\n2\n2\n").run(1);
 
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        // pick item -> rent -> renter -> days -> back
-        new RecordRentalScreen(prompter("1\n1\nalice\n3\nb\n", out), rentals).run(1);
-
-        verify(rentals).recordRental(7, "alice", 3);
-        String printed = out.toString(StandardCharsets.UTF_8);
-        assertTrue(printed.contains("Rented Drill to alice until 2025-01-05 12:00."));
+        assertEquals("0", rentalCount());
+        assertEquals("available", query("SELECT status FROM listed_items WHERE item_id = " + id));
     }
 
     @Test
-    void detailView_showsItemFields() throws Exception {
-        RentalService rentals = mock(RentalService.class);
-        ItemDomain it = item();
-        when(it.getItemId()).thenReturn(7);
-        when(it.getItemName()).thenReturn("Drill");
-        when(it.getDescription()).thenReturn("18V cordless");
-        when(it.getCostPerDay()).thenReturn((int) 5.0);
-        when(rentals.getRentableItems(1)).thenReturn(List.of(it));
+    void rentingRecordsTheRentalFlipsTheItemAndPrintsTheEndTime() throws SQLException {
+        long id = addItem("Ladder", "available");
 
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        new RecordRentalScreen(prompter("1\n2\nb\n", out), rentals).run(1);
+        // open, rent, renter, days. The list is then empty, so no further input is needed
+        screen("1\n1\nmeelis\n3\n").run(1);
 
-        String printed = out.toString(StandardCharsets.UTF_8);
-        assertTrue(printed.contains("=== Drill ==="));
-        assertTrue(printed.contains("18V cordless"));
-        assertTrue(printed.contains("1) Rent this item"));
-        assertTrue(printed.contains("2) Back to list"));
+        assertTrue(output().contains("Rented Ladder to meelis until 2026-06-19 14:30."));
+        assertEquals("rented", query("SELECT status FROM listed_items WHERE item_id = " + id));
+        assertEquals("1", rentalCount());
+        assertEquals("2026-06-19 14:30", query("SELECT end_time FROM rentals"));
+        assertEquals("2", query("SELECT renter_id FROM rentals"));   // meelis reused
+        assertEquals("2", query("SELECT count(*) FROM users"));
     }
 
     @Test
-    void businessRuleException_isPrintedNotThrown() throws Exception {
-        RentalService rentals = mock(RentalService.class);
-        ItemDomain it = item();
-        when(it.getItemId()).thenReturn(7);
-        when(it.getItemName()).thenReturn("Drill");
-        when(it.getDescription()).thenReturn("d");
-        when(it.getCostPerDay()).thenReturn((int) 5.0);
-        when(rentals.getRentableItems(1)).thenReturn(List.of(it));
-        when(rentals.recordRental(anyInt(), anyString(), anyInt()))
-                .thenThrow(new BusinessRuleException("item not available"));
+    void aNewRenterNameCreatesTheUser() throws SQLException {
+        addItem("Ladder", "available");
 
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        new RecordRentalScreen(prompter("1\n1\nalice\n3\nb\n", out), rentals).run(1);
+        screen("1\n1\nnewperson\n2\n").run(1);
 
-        assertTrue(out.toString(StandardCharsets.UTF_8).contains("item not available"));
+        assertEquals("3", query("SELECT count(*) FROM users"));
+        assertEquals("newperson", query("SELECT username FROM users WHERE id = 3"));
     }
 
     @Test
-    void illegalArgument_isPrintedNotThrown() throws Exception {
-        RentalService rentals = mock(RentalService.class);
-        ItemDomain it = item();
-        when(it.getItemId()).thenReturn(7);
-        when(it.getItemName()).thenReturn("Drill");
-        when(it.getDescription()).thenReturn("d");
-        when(it.getCostPerDay()).thenReturn((int) 5.0);
-        when(rentals.getRentableItems(1)).thenReturn(List.of(it));
-        when(rentals.recordRental(anyInt(), anyString(), anyInt()))
-                .thenThrow(new IllegalArgumentException("days must be positive"));
+    void aBlankRenterNameIsAskedAgain() throws SQLException {
+        addItem("Ladder", "available");
 
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        new RecordRentalScreen(prompter("1\n1\nalice\n0\nb\n", out), rentals).run(1);
+        screen("1\n1\n\n   \nmeelis\n3\n").run(1);
 
-        assertTrue(out.toString(StandardCharsets.UTF_8).contains("days must be positive"));
+        assertTrue(output().contains("Please enter a value."));
+        assertEquals("1", rentalCount());
+    }
+
+    @Test
+    void aNonNumericDayCountIsAskedAgain() throws SQLException {
+        addItem("Ladder", "available");
+
+        screen("1\n1\nmeelis\nabc\n3\n").run(1);
+
+        assertTrue(output().contains("Please enter a whole number."));
+        assertEquals("1", rentalCount());
+    }
+
+    @Test
+    void anInvalidDayCountIsPrintedAndNothingIsRecorded() throws SQLException {
+        long id = addItem("Ladder", "available");
+
+        // 0 days is rejected by the service, the message is printed, the list comes back, Back is 2
+        screen("1\n1\nmeelis\n0\n2\n").run(1);
+
+        assertTrue(output().contains("Days must be between 1 and 365"));
+        assertEquals("0", rentalCount());
+        assertEquals("available", query("SELECT status FROM listed_items WHERE item_id = " + id));
+    }
+
+    @Test
+    void anInvalidRenterNameIsPrintedAndNothingIsRecorded() throws SQLException {
+        addItem("Ladder", "available");
+
+        screen("1\n1\nab\n3\n2\n").run(1);   // too short for a username
+
+        assertTrue(output().contains("at least 3 characters"));
+        assertEquals("0", rentalCount());
+        assertEquals("2", query("SELECT count(*) FROM users"));
+    }
+
+    @Test
+    void endOfInputExitsTheScreenWithAnException() throws SQLException {
+        addItem("Ladder", "available");
+
+        assertThrows(InputClosedException.class, () -> screen("").run(1));
     }
 }

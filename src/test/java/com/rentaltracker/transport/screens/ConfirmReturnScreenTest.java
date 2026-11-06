@@ -1,114 +1,170 @@
 package com.rentaltracker.transport.screens;
 
-import com.rentaltracker.domain.enums.RentalStatus;
-import com.rentaltracker.domain.view.ActiveRentalView;
-import com.rentaltracker.service.RentalService;
-import com.rentaltracker.service.exception.BusinessRuleException;
-import com.rentaltracker.transport.Prompter;
-import org.junit.jupiter.api.Test;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
-import java.util.List;
+import java.nio.file.Path;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import com.rentaltracker.infrastructure.Database;
+import com.rentaltracker.repository.ItemRepository;
+import com.rentaltracker.repository.RentalRepository;
+import com.rentaltracker.repository.SqliteTransactor;
+import com.rentaltracker.repository.UserRepository;
+import com.rentaltracker.service.RentalService;
+import com.rentaltracker.service.UserService;
+import com.rentaltracker.transport.Display;
+import com.rentaltracker.transport.Prompter;
+import com.rentaltracker.transport.exception.InputClosedException;
 
 class ConfirmReturnScreenTest {
 
-    private Prompter prompter(String input, ByteArrayOutputStream out) {
-        return new Prompter(
-                new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)),
-                new PrintStream(out, true, StandardCharsets.UTF_8));
+    static final Clock CLOCK = Clock.fixed(Instant.parse("2026-06-17T09:05:30Z"), ZoneId.of("UTC"));
+
+    @TempDir Path tempDir;
+    Database db;
+    RentalService rentals;
+    final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+
+    @BeforeEach
+    void setUp() throws SQLException {
+        db = new Database(tempDir.resolve("test.db").toString());
+        rentals = new RentalService(new ItemRepository(db.connection()), new RentalRepository(db),
+                new UserService(new UserRepository(db)), new SqliteTransactor(db), CLOCK);
+        exec("INSERT INTO users (username) VALUES ('liisa'), ('meelis'), ('marili')");   // 1 owner, 2 and 3 renters
     }
 
-    private ActiveRentalView view() {
-        return new ActiveRentalView(
-                42,
-                "Drill",
-                "alice",
-                LocalDateTime.of(2025, 1, 1, 10, 0),
-                LocalDateTime.of(2025, 1, 3, 10, 0),
-                RentalStatus.ACTIVE);
+    @AfterEach
+    void tearDown() { db.close(); }
+
+    private ConfirmReturnScreen screen(String input) {
+        Prompter prompter = new Prompter(new ByteArrayInputStream(input.getBytes(UTF_8)),
+                new PrintStream(buffer, true, UTF_8));
+        return new ConfirmReturnScreen(prompter, rentals);
     }
 
+    private String output() { return buffer.toString(UTF_8); }
 
-    @Test
-    void choosingBackFromDetail_doesNotConfirm() throws Exception {
-        RentalService rental = mock(RentalService.class);
-        when(rental.getActiveRentalViews(1)).thenReturn(List.of(view()));
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-
-        // pick item 1, then "2) Back to list"; then "b" to exit list
-        new ConfirmReturnScreen(prompter("1\n2\nb\n", out), rental).run(1);
-
-        verify(rental, never()).confirmReturn(anyInt());
+    private void exec(String sql) throws SQLException {
+        try (Statement st = db.connection().createStatement()) { st.execute(sql); }
     }
 
-    @Test
-    void backFromList_exitsImmediately() throws Exception {
-        RentalService rental = mock(RentalService.class);
-        when(rental.getActiveRentalViews(1)).thenReturn(List.of(view()));
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-
-        new ConfirmReturnScreen(prompter("b\n", out), rental).run(1);
-
-        verify(rental, never()).confirmReturn(anyInt());
+    private String query(String sql) throws SQLException {
+        try (Statement st = db.connection().createStatement();
+             ResultSet rs = st.executeQuery(sql)) {
+            rs.next();
+            return rs.getString(1);
+        }
     }
 
-    @Test
-    void emptyList_doesNotPrompt() throws Exception {
-        RentalService rental = mock(RentalService.class);
-        when(rental.getActiveRentalViews(1)).thenReturn(List.of());
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-
-        new ConfirmReturnScreen(prompter("", out), rental).run(1);
-
-        verify(rental, never()).confirmReturn(anyInt());
+    /** An item out on an active rental. Returns the rental id. */
+    private long addRental(String itemName, String itemStatus, int renterId, String end) throws SQLException {
+        exec("INSERT INTO listed_items (owner_id, item_name, description, cost_per_day, status) "
+           + "VALUES (1, '" + itemName + "', 'x', 5, '" + itemStatus + "')");
+        long itemId = Long.parseLong(query("SELECT last_insert_rowid()"));
+        exec("INSERT INTO rentals (item_id, renter_id, start_time, end_time) VALUES ("
+           + itemId + ", " + renterId + ", '2026-06-16 14:30', '" + end + "')");
+        return Long.parseLong(query("SELECT last_insert_rowid()"));
     }
 
     @Test
-    void businessRuleException_isPrintedNotThrown() throws Exception {
-        RentalService rental = mock(RentalService.class);
-        when(rental.getActiveRentalViews(1)).thenReturn(List.of(view()));
-        doThrow(new BusinessRuleException("already returned"))
-                .when(rental).confirmReturn(42);
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
+    void anEmptyListSaysSoAndNeverAsksForInput() {
+        screen("").run(1);
 
-        // pick item 1, confirm
-        new ConfirmReturnScreen(prompter("1\n1\nb\n", out), rental).run(1);
-
-        assertTrue(out.toString(StandardCharsets.UTF_8).contains("already returned"));
+        assertTrue(output().contains("Nothing is out on rental."));
     }
 
     @Test
-    void illegalArgument_isPrintedNotThrown() throws Exception {
-        RentalService rental = mock(RentalService.class);
-        when(rental.getActiveRentalViews(1)).thenReturn(List.of(view()));
-        doThrow(new IllegalArgumentException("bad id")).when(rental).confirmReturn(42);
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
+    void theListShowsItemAndRenterSortedByDueDate() throws SQLException {
+        addRental("Ladder", "rented", 2, "2026-06-25 10:00");
+        addRental("Drill", "rented", 3, "2026-06-18 10:00");
 
-        new ConfirmReturnScreen(prompter("1\n1\nb\n", out), rental).run(1);
+        screen("3\n").run(1);   // two rows, so Back is 3
 
-        assertTrue(out.toString(StandardCharsets.UTF_8).contains("bad id"));
+        int drill = output().indexOf("1) " + Display.row("Drill", "marili"));
+        int ladder = output().indexOf("2) " + Display.row("Ladder", "meelis"));
+        assertTrue(drill >= 0 && ladder > drill, "soonest due date should be first");
     }
 
     @Test
-    void detailView_showsFields() throws Exception {
-        RentalService rental = mock(RentalService.class);
-        when(rental.getActiveRentalViews(1)).thenReturn(List.of(view()));
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
+    void theDetailViewUsesTheDisplayFormats() throws SQLException {
+        addRental("Ladder", "rented", 2, "2026-06-19 14:30");
 
-        // view -> back -> back
-        new ConfirmReturnScreen(prompter("1\n2\nb\n", out), rental).run(1);
+        screen("1\n2\n2\n").run(1);
 
-        String printed = out.toString(StandardCharsets.UTF_8);
-        assertTrue(printed.contains("=== Drill ==="));
-        assertTrue(printed.contains("alice"));
-        assertTrue(printed.contains("1) Confirm return"));
-        assertTrue(printed.contains("2) Back to list"));
+        assertTrue(output().contains("=== Ladder ==="));
+        assertTrue(output().contains(Display.row("renter", "meelis")));
+        assertTrue(output().contains(Display.row("start", "2026-06-16 14:30")));
+        assertTrue(output().contains(Display.row("end", "2026-06-19 14:30")));
+        assertTrue(output().contains(Display.row("status", "active")));
+        assertFalse(output().contains("T14:30"));
+        assertFalse(output().contains("ACTIVE"));
+        assertTrue(output().contains("1) Confirm return"));
+    }
+
+    @Test
+    void goingBackFromTheDetailConfirmsNothing() throws SQLException {
+        long rentalId = addRental("Ladder", "rented", 2, "2026-06-19 14:30");
+
+        screen("1\n2\n2\n").run(1);
+
+        assertEquals("active", query("SELECT status FROM rentals WHERE rental_id = " + rentalId));
+    }
+
+    @Test
+    void confirmingClosesTheRentalAndFreesTheItem() throws SQLException {
+        long rentalId = addRental("Ladder", "rented", 2, "2026-06-19 14:30");
+
+        screen("1\n1\n").run(1);   // open, confirm, then the list is empty
+
+        assertTrue(output().contains("Returned Ladder."));
+        assertFalse(output().contains("stays unlisted"));
+        assertEquals("closed", query("SELECT status FROM rentals WHERE rental_id = " + rentalId));
+        assertEquals("2026-06-17 09:05", query("SELECT returned_at FROM rentals WHERE rental_id = " + rentalId));
+        assertEquals("available", query("SELECT status FROM listed_items WHERE item_name = 'Ladder'"));
+    }
+
+    @Test
+    void anItemDelistedWhileOutStaysUnlistedAndTheScreenSaysSo() throws SQLException {
+        long rentalId = addRental("Ladder", "unlisted", 2, "2026-06-19 14:30");
+
+        screen("1\n1\n").run(1);
+
+        assertTrue(output().contains("stays unlisted"));
+        assertEquals("closed", query("SELECT status FROM rentals WHERE rental_id = " + rentalId));
+        assertEquals("unlisted", query("SELECT status FROM listed_items WHERE item_name = 'Ladder'"));
+    }
+
+    @Test
+    void theListIsShownAgainWithoutTheReturnedRental() throws SQLException {
+        addRental("Ladder", "rented", 2, "2026-06-19 14:30");
+        addRental("Drill", "rented", 3, "2026-06-25 10:00");
+
+        screen("1\n1\n2\n").run(1);   // return the first, then Back from the one-row list
+
+        int secondList = output().indexOf("=== Confirm return", output().indexOf("=== Confirm return") + 1);
+        assertTrue(secondList > 0);
+        assertFalse(output().substring(secondList).contains("Ladder"));
+        assertTrue(output().substring(secondList).contains("Drill"));
+    }
+
+    @Test
+    void endOfInputExitsTheScreenWithAnException() throws SQLException {
+        addRental("Ladder", "rented", 2, "2026-06-19 14:30");
+
+        assertThrows(InputClosedException.class, () -> screen("").run(1));
     }
 }

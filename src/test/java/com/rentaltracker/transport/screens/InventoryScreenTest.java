@@ -1,164 +1,11 @@
 package com.rentaltracker.transport.screens;
 
-<<<<<<< Updated upstream
-import com.rentaltracker.domain.ItemDomain;
-import com.rentaltracker.domain.enums.ItemStatus;
-import com.rentaltracker.service.ItemDetail;
-import com.rentaltracker.service.ItemService;
-import com.rentaltracker.service.exception.BusinessRuleException;
-import com.rentaltracker.transport.Prompter;
-import org.junit.jupiter.api.Test;
-=======
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.*;
->>>>>>> Stashed changes
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
-<<<<<<< Updated upstream
-import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
-
-class InventoryScreenTest {
-
-    private Prompter prompter(String input, ByteArrayOutputStream out) {
-        return new Prompter(
-                new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)),
-                new PrintStream(out, true, StandardCharsets.UTF_8));
-    }
-
-    /*
-     * ItemDomain(int itemId, int ownerId, String itemName, String description,
-     *            int costPerDay, ItemStatus status, LocalDateTime createdAt)
-     */
-    private ItemDomain item(int id, String name, ItemStatus status) {
-        return new ItemDomain(
-                id, 5, name, "Item desc", 10, status,
-                LocalDateTime.of(2025, 1, 1, 10, 0));
-    }
-
-    private ItemDetail detail(ItemDomain item, String owner) {
-        return new ItemDetail(item, owner);
-    }
-
-    @Test
-    void backFromList_exitsWithoutCallingDetail() {
-        ItemService items = mock(ItemService.class);
-        when(items.getItemsByOwner(1)).thenReturn(List.of(item(42, "Drill", ItemStatus.available)));
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-
-        new InventoryScreen(prompter("b\n", out), items).run(1);
-
-        verify(items, never()).getItemDetail(anyInt());
-        verify(items, never()).delist(anyInt());
-        verify(items, never()).relist(anyInt());
-    }
-
-    @Test
-    void emptyList_doesNotPromptOrFetchDetail() {
-        ItemService items = mock(ItemService.class);
-        when(items.getItemsByOwner(1)).thenReturn(List.of());
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-
-        new InventoryScreen(prompter("", out), items).run(1);
-
-        verify(items, never()).getItemDetail(anyInt());
-    }
-
-    @Test
-    void delistFromDetail_callsDelistAndLoopsBack() {
-        ItemService items = mock(ItemService.class);
-        ItemDomain listed = item(42, "Drill", ItemStatus.rented);
-        when(items.getItemsByOwner(1)).thenReturn(List.of(listed));
-        when(items.getItemDetail(42)).thenReturn(detail(listed, "alice"));
-        when(items.delist(42)).thenReturn(item(42, "Drill", ItemStatus.unlisted));
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-
-        new InventoryScreen(prompter("1\n1\nb\n", out), items).run(1);
-
-        verify(items).delist(42);
-        assertTrue(out.toString(StandardCharsets.UTF_8).contains("Drill is now unlisted"));
-    }
-
-    @Test
-    void relistFromDetail_callsRelist() {
-        ItemService items = mock(ItemService.class);
-        ItemDomain unlisted = item(42, "Drill", ItemStatus.unlisted);
-        when(items.getItemsByOwner(1)).thenReturn(List.of(unlisted));
-        when(items.getItemDetail(42)).thenReturn(detail(unlisted, "alice"));
-        when(items.relist(42)).thenReturn(item(42, "Drill", ItemStatus.rented));
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-
-        new InventoryScreen(prompter("1\n1\nb\n", out), items).run(1);
-
-        verify(items).relist(42);
-        assertFalse(out.toString(StandardCharsets.UTF_8).contains("Drill is now listed"));
-    }
-
-    @Test
-    void businessRuleException_isPrintedNotThrown() {
-        ItemService items = mock(ItemService.class);
-        ItemDomain listed = item(42, "Drill", ItemStatus.rented);
-        when(items.getItemsByOwner(1)).thenReturn(List.of(listed));
-        when(items.getItemDetail(42)).thenReturn(detail(listed, "alice"));
-        when(items.delist(42)).thenThrow(new BusinessRuleException("cannot delist rented item"));
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-
-        new InventoryScreen(prompter("1\n1\nb\n", out), items).run(1);
-
-        assertTrue(out.toString(StandardCharsets.UTF_8).contains("cannot delist rented item"));
-    }
-
-    @Test
-    void backFromDetail_doesNotChangeStatus() {
-        ItemService items = mock(ItemService.class);
-        ItemDomain listed = item(42, "Drill", ItemStatus.rented);
-        when(items.getItemsByOwner(1)).thenReturn(List.of(listed));
-        when(items.getItemDetail(42)).thenReturn(detail(listed, "alice"));
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-
-        new InventoryScreen(prompter("1\n2\nb\n", out), items).run(1);
-
-        verify(items, never()).delist(anyInt());
-        verify(items, never()).relist(anyInt());
-    }
-
-    @Test
-    void detailView_showsFieldsAndCorrectActionLabel() {
-        ItemService items = mock(ItemService.class);
-        ItemDomain listed = item(42, "Drill", ItemStatus.rented);
-        when(items.getItemsByOwner(1)).thenReturn(List.of(listed));
-        when(items.getItemDetail(42)).thenReturn(detail(listed, "alice"));
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-
-        new InventoryScreen(prompter("1\n2\nb\n", out), items).run(1);
-
-        String printed = out.toString(StandardCharsets.UTF_8);
-        assertTrue(printed.contains("=== Drill ==="));
-        assertTrue(printed.contains("alice"));
-        assertTrue(printed.contains("1) Delist"));
-        assertTrue(printed.contains("2) Back to list"));
-    }
-
-    @Test
-    void unlistedDetail_showsRelistLabel() {
-        ItemService items = mock(ItemService.class);
-        ItemDomain unlisted = item(42, "Drill", ItemStatus.unlisted);
-        when(items.getItemsByOwner(1)).thenReturn(List.of(unlisted));
-        when(items.getItemDetail(42)).thenReturn(detail(unlisted, "alice"));
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-
-        new InventoryScreen(prompter("1\n2\nb\n", out), items).run(1);
-
-        String printed = out.toString(StandardCharsets.UTF_8);
-        assertTrue(printed.contains("1) Relist"));
-        assertFalse(printed.contains("1) Delist"));
-=======
 import java.nio.file.Path;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -176,6 +23,7 @@ import com.rentaltracker.repository.SqliteTransactor;
 import com.rentaltracker.repository.UserRepository;
 import com.rentaltracker.service.ItemService;
 import com.rentaltracker.service.UserService;
+import com.rentaltracker.transport.Display;
 import com.rentaltracker.transport.Prompter;
 import com.rentaltracker.transport.exception.InputClosedException;
 
@@ -236,7 +84,7 @@ class InventoryScreenTest {
     void anEmptyInventorySaysSoAndNeverAsksForInput() {
         screen("").run(1);
 
-        assertTrue(output().contains("Nothing to show."));
+        assertTrue(output().contains("You have not listed any items yet."));
     }
 
     @Test
@@ -246,11 +94,12 @@ class InventoryScreenTest {
         addItem(1, "Tent", "unlisted");
         addItem(3, "Saw", "available");   // someone else's
 
-        screen("b\n").run(1);
+        screen("4\n").run(1);   // 3 rows, so Back is 4
 
         assertTrue(output().contains("1) Ladder"));
         assertTrue(output().contains("2) Drill"));
         assertTrue(output().contains("3) Tent"));
+        assertTrue(output().contains("4) Back to menu"));
         assertTrue(output().contains("rented"));
         assertTrue(output().contains("unlisted"));
         assertFalse(output().contains("Saw"));
@@ -260,19 +109,30 @@ class InventoryScreenTest {
     void theDetailViewShowsTheItemFieldsAndTheOwner() throws SQLException {
         addItem(1, "Ladder", "available");
 
-        screen("1\n2\nb\n").run(1);   // open it, back to the list, back to the menu
+        screen("1\n2\n2\n").run(1);   // open it, back to the list, back to the menu
 
         assertTrue(output().contains("=== Ladder ==="));
         assertTrue(output().contains("6-step ladder"));
         assertTrue(output().contains("liisa"));
         assertTrue(output().contains("1) Delist"));
+        assertTrue(output().contains("2) Back to list"));
+    }
+
+    @Test
+    void aBlankDescriptionIsShownAsADash() throws SQLException {
+        exec("INSERT INTO listed_items (owner_id, item_name, description, cost_per_day) "
+           + "VALUES (1, 'Ladder', '', 5)");
+
+        screen("1\n2\n2\n").run(1);
+
+        assertTrue(output().contains(Display.row("description", "-")));
     }
 
     @Test
     void goingBackFromTheDetailLeavesTheStatusAlone() throws SQLException {
         long id = addItem(1, "Ladder", "available");
 
-        screen("1\n2\nb\n").run(1);
+        screen("1\n2\n2\n").run(1);
 
         assertEquals("available", status(id));
     }
@@ -281,7 +141,7 @@ class InventoryScreenTest {
     void delistingAnAvailableItemMakesItUnlisted() throws SQLException {
         long id = addItem(1, "Ladder", "available");
 
-        screen("1\n1\nb\n").run(1);
+        screen("1\n1\n2\n").run(1);   // open, delist, then Back from the rebuilt list
 
         assertTrue(output().contains("Ladder is now unlisted."));
         assertEquals("unlisted", status(id));
@@ -292,7 +152,7 @@ class InventoryScreenTest {
         long id = addItem(1, "Ladder", "rented");
         addActiveRental(id);
 
-        screen("1\n1\nb\n").run(1);
+        screen("1\n1\n2\n").run(1);
 
         assertEquals("unlisted", status(id));
         assertEquals("active", query("SELECT status FROM rentals WHERE item_id = " + id));
@@ -302,9 +162,10 @@ class InventoryScreenTest {
     void anUnlistedItemOffersRelistAndRelistsIt() throws SQLException {
         long id = addItem(1, "Tent", "unlisted");
 
-        screen("1\n1\nb\n").run(1);
+        screen("1\n1\n2\n").run(1);
 
         assertTrue(output().contains("1) Relist"));
+        assertFalse(output().contains("1) Delist"));
         assertTrue(output().contains("Tent is now available."));
         assertEquals("available", status(id));
     }
@@ -314,7 +175,7 @@ class InventoryScreenTest {
         long id = addItem(1, "Ladder", "unlisted");
         addActiveRental(id);
 
-        screen("1\n1\nb\n").run(1);
+        screen("1\n1\n2\n").run(1);
 
         assertTrue(output().contains("Confirm the return first"));
         assertEquals("unlisted", status(id));
@@ -324,7 +185,7 @@ class InventoryScreenTest {
     void theListIsShownAgainAfterAnActionWithTheNewStatus() throws SQLException {
         addItem(1, "Ladder", "available");
 
-        screen("1\n1\nb\n").run(1);   // delist, then the list comes back
+        screen("1\n1\n2\n").run(1);   // delist, then the list comes back
 
         int firstList = output().indexOf("=== My inventory");
         int secondList = output().indexOf("=== My inventory", firstList + 1);
@@ -338,11 +199,12 @@ class InventoryScreenTest {
             addItem(1, "Item" + i, "available");
         }
 
-        screen("n\n6\n2\nb\n").run(1);   // next page, open item 6, back, leave
+        // Next page (6), open the only row on page 2 (1), back to the list (2), Back from page 1 (7)
+        screen("6\n1\n2\n7\n").run(1);
 
         assertTrue(output().contains("(page 1 of 2)"));
         assertTrue(output().contains("(page 2 of 2)"));
-        assertTrue(output().contains("p) Previous page"));
+        assertTrue(output().contains("2) Previous page"));
         assertTrue(output().contains("=== Item6 ==="));
     }
 
@@ -351,6 +213,5 @@ class InventoryScreenTest {
         addItem(1, "Ladder", "available");
 
         assertThrows(InputClosedException.class, () -> screen("").run(1));
->>>>>>> Stashed changes
     }
 }

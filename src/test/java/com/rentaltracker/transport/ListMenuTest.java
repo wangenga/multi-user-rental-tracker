@@ -122,7 +122,6 @@ class ListMenuTest {
 
     @Test
     void middlePageOffersNextThenPreviousThenBack() {
-        choose("8\n", items(11).subList(0, 11));   // 11 items: page 1 has Next 6, Back 7
         // go to page 2 of 3, where the controls are Next 6, Previous 7, Back 8
         ByteArrayOutputStream second = new ByteArrayOutputStream();
         Prompter prompter = new Prompter(
