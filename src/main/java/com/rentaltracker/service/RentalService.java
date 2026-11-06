@@ -56,6 +56,11 @@ public class RentalService {
         return rentals.findActiveViewsByOwner(ownerId);
     }
 
+    /** One rental for its detail screen. */
+    public ActiveRentalView getRentalView(long rentalId) {
+        return rentals.findViewById(rentalId);
+    }
+
     // ---------- record a rental ----------
 
     public RentalDomain recordRental(int itemId, String renterName, int days) {
