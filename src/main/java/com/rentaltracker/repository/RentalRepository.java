@@ -115,6 +115,27 @@ public class RentalRepository {
         }
     }
 
+    /** @throws NotFoundException if no rental has this id */
+    public ActiveRentalView findViewById(long rentalId) {
+        String sql = "SELECT r.rental_id, i.item_name, u.username, "
+                + "       r.start_time, r.end_time, r.status "
+                + "FROM rentals r "
+                + "JOIN listed_items i ON i.item_id = r.item_id "
+                + "JOIN users       u ON u.id = r.renter_id "
+                + "WHERE r.rental_id = ?";
+        try (PreparedStatement ps = db.connection().prepareStatement(sql)) {
+            ps.setLong(1, rentalId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    throw new NotFoundException("Rental not found: id=" + rentalId);
+                }
+                return mapView(rs);
+            }
+        } catch (SQLException e) {
+            throw SqlExceptionTranslator.translate("find rental view by id", e);
+        }
+    }
+
 
 
     /**
