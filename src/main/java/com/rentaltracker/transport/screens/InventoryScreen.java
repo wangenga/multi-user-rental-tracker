@@ -26,9 +26,12 @@ public class InventoryScreen {
     /** Every item the owner has, in any status. Reloaded each time so a status change shows up. */
     public void run(int ownerId) {
         while (true) {
-            List<ItemDomain> owned = items.getItemsByOwner(ownerId);
-            Optional<ItemDomain> picked = listMenu.choose("My inventory", owned,
-                    item -> Display.row(item.getItemName(), item.getStatus()));
+            List<ItemDomain> all = items.getItemsByOwner(ownerId);   // this line must exist, in scope, before choose
+            Optional<ItemDomain> picked = listMenu.choose(
+                "My inventory",
+                "You have not listed any items yet.",
+                all,
+                item -> Display.row(item.getItemName(), item.getStatus()));
             if (picked.isEmpty()) {
                 return;
             }

@@ -1,57 +1,66 @@
 package com.rentaltracker.transport.screens;
 
-import com.rentaltracker.domain.ItemDomain;
-import com.rentaltracker.domain.RentalDomain;
-import com.rentaltracker.domain.User;
+import java.util.List;
+import java.util.Optional;
+
+import com.rentaltracker.domain.enums.ItemStatus;
 import com.rentaltracker.domain.view.ActiveRentalView;
-import com.rentaltracker.service.ItemService;
 import com.rentaltracker.service.RentalService;
 import com.rentaltracker.service.exception.BusinessRuleException;
 import com.rentaltracker.transport.Display;
 import com.rentaltracker.transport.ListMenu;
 import com.rentaltracker.transport.Prompter;
 
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-
 public class ConfirmReturnScreen {
 
     private final Prompter prompter;
-    private final RentalService rental;
     private final ListMenu listMenu;
+    private final RentalService rentals;
 
-    public ConfirmReturnScreen (Prompter prompter, RentalService rental){
+    public ConfirmReturnScreen(Prompter prompter, RentalService rentals) {
         this.prompter = prompter;
-        this.rental = rental;
         this.listMenu = new ListMenu(prompter);
+        this.rentals = rentals;
     }
+
     public void run(int ownerId) {
         while (true) {
-            List<ActiveRentalView> active = rental.getActiveRentalViews(ownerId);
-            Optional<ActiveRentalView> chosen = listMenu.choose("Confirm return", active,
-                    v -> Display.row(v.itemName(), v.renterUsername()));
-            if (chosen.isEmpty()) return;
-            confirmReturn(chosen.get());
+            List<ActiveRentalView> active = rentals.getActiveRentalViews(ownerId);
+            Optional<ActiveRentalView> picked = listMenu.choose(
+                    "Confirm return",
+                    "Nothing is out on rental.",
+                    active,
+                    view -> Display.row(view.itemName(), view.renterUsername()));
+            if (picked.isEmpty()) {
+                return;
+            }
+            showDetail(picked.get().rentalId());
         }
     }
 
-    public void confirmReturn(ActiveRentalView view) {
+    private void showDetail(long rentalId) {
+        ActiveRentalView view = rentals.getRentalView(rentalId);
+
         prompter.println();
         prompter.println("=== " + view.itemName() + " ===");
         prompter.println(Display.row("renter", view.renterUsername()));
-        prompter.println(Display.row("start",  view.startTime()));
-        prompter.println(Display.row("end",    view.endTime()));
-        prompter.println(Display.row("status", view.status()));
+        prompter.println(Display.row("start", Display.time(view.startTime())));
+        prompter.println(Display.row("end", Display.time(view.endTime())));
+        prompter.println(Display.row("status", view.status().name().toLowerCase()));
         prompter.println("1) Confirm return");
         prompter.println("2) Back to list");
 
-        if (prompter.askChoice("> ", 1, 2) == 2) return;
+        if (prompter.askChoice("> ", 1, 2) == 2) {
+            return;
+        }
 
         try {
-            rental.confirmReturn(view.rentalId());
-            prompter.println("Confirmed that " + view.itemName() + " has been returned.");
-        } catch (IllegalArgumentException | BusinessRuleException e) {
+            var item = rentals.confirmReturn(rentalId);
+            prompter.println("Returned " + view.itemName() + ".");
+            if (item.getStatus() == ItemStatus.unlisted) {
+                prompter.println("It stays unlisted because it was delisted while out.");
+            }
+        } catch (BusinessRuleException e) {
             prompter.println(e.getMessage());
         }
     }

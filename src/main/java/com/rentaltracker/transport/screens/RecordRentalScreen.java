@@ -26,8 +26,11 @@ public class RecordRentalScreen {
     public void run(int ownerId) {
         while (true) {
             List<ItemDomain> available = rentals.getRentableItems(ownerId);
-            Optional<ItemDomain> picked = listMenu.choose("Record a rental", available,
-                    item -> Display.row(item.getItemName(), item.getCostPerDay() + " per day"));
+            Optional<ItemDomain> picked = listMenu.choose(
+                "Record a rental",
+                "No items are available to rent.",
+                available,
+                item -> Display.row(item.getItemName(), item.getCostPerDay() + " per day"));
             if (picked.isEmpty()) {
                 return;
             }
