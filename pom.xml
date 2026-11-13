@@ -35,6 +35,13 @@
       <version>5.18.0</version>
       <scope>test</scope>
     </dependency>
+
+    <dependency>
+      <groupId>com.password4j</groupId>
+      <artifactId>password4j</artifactId>
+      <version>1.8.4</version>
+    </dependency>
+
   </dependencies>
 
   <build>

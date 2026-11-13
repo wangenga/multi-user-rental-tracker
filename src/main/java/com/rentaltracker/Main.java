@@ -28,7 +28,7 @@ import com.rentaltracker.transport.screens.StartupScreen;
 public class Main {
 
     static String resolvePath(String[] args) {
-        return args.length > 0 ? args[0] : "data/local.db";
+        return args.length > 0 ? args[0] : "data/multiUser.db";
     }
 
     public static void main(String[] args) {
