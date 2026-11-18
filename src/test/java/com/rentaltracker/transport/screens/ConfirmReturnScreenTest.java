@@ -44,7 +44,7 @@ class ConfirmReturnScreenTest {
         db = new Database(tempDir.resolve("test.db").toString());
         rentals = new RentalService(new ItemRepository(db.connection()), new RentalRepository(db),
                 new UserService(new UserRepository(db)), new SqliteTransactor(db), CLOCK);
-        exec("INSERT INTO users (username) VALUES ('liisa'), ('meelis'), ('marili')");   // 1 owner, 2 and 3 renters
+        exec("INSERT INTO users (username, password) VALUES ('liisa', 'x'), ('meelis', 'x'), ('marili', 'x')");   // 1 owner, 2 and 3 renters
     }
 
     @AfterEach

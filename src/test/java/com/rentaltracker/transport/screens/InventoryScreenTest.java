@@ -39,7 +39,7 @@ class InventoryScreenTest {
         db = new Database(tempDir.resolve("test.db").toString());
         items = new ItemService(new ItemRepository(db.connection()), new RentalRepository(db),
                 new UserService(new UserRepository(db)), new SqliteTransactor(db));
-        exec("INSERT INTO users (username) VALUES ('liisa'), ('meelis'), ('marili')");   // 1 owner, 2 renter, 3 other owner
+        exec("INSERT INTO users (username, password) VALUES ('liisa', 'x'), ('meelis', 'x'), ('marili', 'x')");   // 1 owner, 2 renter, 3 other owner
     }
 
     @AfterEach

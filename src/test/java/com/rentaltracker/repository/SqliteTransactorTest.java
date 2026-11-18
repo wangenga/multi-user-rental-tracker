@@ -47,7 +47,7 @@ class SqliteTransactorTest {
         }
     }
 
-    private static final String ADD_A = "INSERT INTO users (username) VALUES ('a')";
+    private static final String ADD_A = "INSERT INTO users (username, password) VALUES ('a', 'x')";
 
     @Test
     void commitsAndReturnsTheResultWhenWorkSucceeds() throws SQLException {
@@ -120,7 +120,7 @@ class SqliteTransactorTest {
     void nestedTransactionsCommitTogetherWhenNothingFails() throws SQLException {
         tx.runInTransaction(() -> {
             tx.runInTransaction(() -> exec(ADD_A));
-            exec("INSERT INTO users (username) VALUES ('b')");
+            exec("INSERT INTO users (username, password) VALUES ('b', 'x')");
         });
 
         assertEquals(2, userCount());

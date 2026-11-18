@@ -34,7 +34,7 @@ class ListedItemRepositoryTest {
         items = new ItemRepository(db.connection());
 
         // users: 1 and 2 (both potential owners)
-        exec("INSERT INTO users (username) VALUES ('liisa'), ('meelis')");
+        exec("INSERT INTO users (username, password) VALUES ('liisa', 'x'), ('meelis', 'x')");
     }
 
     @AfterEach

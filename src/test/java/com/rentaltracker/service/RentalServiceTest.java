@@ -58,7 +58,7 @@ class RentalServiceTest {
         service = new RentalService(items, rentals, users, new SqliteTransactor(db), CLOCK);
 
         // user 1 = owner, 2 = renter, 3 = second owner
-        exec("INSERT INTO users (username) VALUES ('liisa'), ('meelis'), ('marili')");
+        exec("INSERT INTO users (username, password) VALUES ('liisa', 'x'), ('meelis', 'x'), ('marili', 'x')");
     }
 
     @AfterEach

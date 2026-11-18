@@ -47,7 +47,7 @@ class ItemServiceTest {
         service = new ItemService(new ItemRepository(db.connection()), rentals,
                 new UserService(new UserRepository(db)), new SqliteTransactor(db));
         // 1 = owner, 2 = renter, 3 = a second owner
-        exec("INSERT INTO users (username) VALUES ('liisa'), ('meelis'), ('marili')");
+        exec("INSERT INTO users (username, password) VALUES ('liisa', 'x'), ('meelis', 'x'), ('marili', 'x')");
     }
 
     @AfterEach

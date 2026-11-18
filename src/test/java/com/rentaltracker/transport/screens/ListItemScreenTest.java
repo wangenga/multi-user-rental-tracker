@@ -38,7 +38,7 @@ class ListItemScreenTest {
         db = new Database(tempDir.resolve("test.db").toString());
         items = new ItemService(new ItemRepository(db.connection()), new RentalRepository(db),
                 new UserService(new UserRepository(db)), new SqliteTransactor(db));
-        exec("INSERT INTO users (username) VALUES ('liisa'), ('meelis')");   // 1 and 2
+        exec("INSERT INTO users (username, password) VALUES ('liisa', 'x'), ('meelis', 'x')");   // 1 and 2
     }
 
     @AfterEach

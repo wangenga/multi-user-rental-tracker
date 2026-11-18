@@ -44,7 +44,7 @@ class RecordRentalScreenTest {
         db = new Database(tempDir.resolve("test.db").toString());
         rentals = new RentalService(new ItemRepository(db.connection()), new RentalRepository(db),
                 new UserService(new UserRepository(db)), new SqliteTransactor(db), CLOCK);
-        exec("INSERT INTO users (username) VALUES ('liisa'), ('meelis')");   // 1 owner, 2 renter
+        exec("INSERT INTO users (username, password) VALUES ('liisa', 'x'), ('meelis', 'x')");   // 1 owner, 2 renter
     }
 
     @AfterEach

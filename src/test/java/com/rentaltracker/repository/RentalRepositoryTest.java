@@ -41,7 +41,7 @@ class RentalRepositoryTest {
         rentals = new RentalRepository(db);
 
         // users: 1 owner, 2 renter, 3 a second owner
-        exec("INSERT INTO users (username) VALUES ('liisa'), ('meelis'), ('marili')");
+        exec("INSERT INTO users (username, password) VALUES ('liisa', 'x'), ('meelis', 'x'), ('marili', 'x')");
         // items 1-3 belong to user 1, item 4 belongs to user 3
         exec("INSERT INTO listed_items (owner_id, item_name, description, cost_per_day) VALUES "
                 + "(1, 'Ladder', 'x', 5), (1, 'Drill', 'x', 4), (1, 'Tent', 'x', 8), (3, 'Saw', 'x', 6)");

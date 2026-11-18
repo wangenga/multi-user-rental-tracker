@@ -69,8 +69,8 @@ class SchemaTest {
     }
 
     private void seedOwnerRenterAndItem() throws SQLException {
-        exec("INSERT INTO users(username) VALUES ('liisa')");
-        exec("INSERT INTO users(username) VALUES ('meelis')");
+        exec("INSERT INTO users (username, password) VALUES ('liisa', 'x')");
+        exec("INSERT INTO users (username, password) VALUES ('meelis', 'x')");
         exec("INSERT INTO listed_items(owner_id, item_name, description, cost_per_day) "
                 + "VALUES (1, 'Ladder', '6-step', 5)");
     }
@@ -115,25 +115,31 @@ class SchemaTest {
 
     @Test
     void duplicateUsernameViolatesUnique() throws SQLException {
-        exec("INSERT INTO users(username) VALUES ('liisa')");
-        assertFails("UNIQUE constraint failed", "INSERT INTO users(username) VALUES ('liisa')");
+        exec("INSERT INTO users (username, password) VALUES ('liisa', 'x')");
+        assertFails("UNIQUE constraint failed", "INSERT INTO users (username, password) VALUES ('liisa', 'x')");
     }
 
     @Test
     void blankUsernameViolatesCheck() {
-        assertFails("CHECK constraint failed", "INSERT INTO users(username) VALUES ('   ')");
+        assertFails("CHECK constraint failed", "INSERT INTO users (username, password) VALUES ('   ')");
     }
 
     @Test
     void nullUsernameViolatesNotNull() {
-        assertFails("NOT NULL constraint failed", "INSERT INTO users(username) VALUES (NULL)");
+        assertFails("NOT NULL constraint failed", "INSERT INTO users (username, password) VALUES (NULL)");
+    }
+
+    @Test
+    void userWithoutPasswordViolatesNotNull() {
+        assertFails("NOT NULL constraint failed: users.password",
+                "INSERT INTO users(username) VALUES ('liisa')");
     }
 
     // ---------- listed_items ----------
 
     @Test
     void itemWithoutNameViolatesNotNull() throws SQLException {
-        exec("INSERT INTO users(username) VALUES ('liisa')");
+        exec("INSERT INTO users (username, password) VALUES ('liisa', 'x')");
         assertFails("NOT NULL constraint failed",
                 "INSERT INTO listed_items(owner_id, item_name, description, cost_per_day) "
                         + "VALUES (1, NULL, 'x', 5)");
@@ -141,7 +147,7 @@ class SchemaTest {
 
     @Test
     void blankItemNameViolatesCheck() throws SQLException {
-        exec("INSERT INTO users(username) VALUES ('liisa')");
+        exec("INSERT INTO users (username, password) VALUES ('liisa', 'x')");
         assertFails("CHECK constraint failed",
                 "INSERT INTO listed_items(owner_id, item_name, description, cost_per_day) "
                         + "VALUES (1, '  ', 'x', 5)");
@@ -149,7 +155,7 @@ class SchemaTest {
 
     @Test
     void itemWithBadStatusViolatesCheck() throws SQLException {
-        exec("INSERT INTO users(username) VALUES ('liisa')");
+        exec("INSERT INTO users (username, password) VALUES ('liisa', 'x')");
         assertFails("CHECK constraint failed",
                 "INSERT INTO listed_items(owner_id, item_name, description, cost_per_day, status) "
                         + "VALUES (1, 'Drill', 'x', 3, 'broken')");
@@ -157,7 +163,7 @@ class SchemaTest {
 
     @Test
     void zeroCostViolatesCheck() throws SQLException {
-        exec("INSERT INTO users(username) VALUES ('liisa')");
+        exec("INSERT INTO users (username, password) VALUES ('liisa', 'x')");
         assertFails("CHECK constraint failed",
                 "INSERT INTO listed_items(owner_id, item_name, description, cost_per_day) "
                         + "VALUES (1, 'Drill', 'x', 0)");
@@ -165,7 +171,7 @@ class SchemaTest {
 
     @Test
     void negativeCostViolatesCheck() throws SQLException {
-        exec("INSERT INTO users(username) VALUES ('liisa')");
+        exec("INSERT INTO users (username, password) VALUES ('liisa', 'x')");
         assertFails("CHECK constraint failed",
                 "INSERT INTO listed_items(owner_id, item_name, description, cost_per_day) "
                         + "VALUES (1, 'Drill', 'x', -1)");
@@ -173,7 +179,7 @@ class SchemaTest {
 
     @Test
     void aCostOfOneIsAccepted() throws SQLException {
-        exec("INSERT INTO users(username) VALUES ('liisa')");
+        exec("INSERT INTO users (username, password) VALUES ('liisa', 'x')");
         exec("INSERT INTO listed_items(owner_id, item_name, description, cost_per_day) "
                 + "VALUES (1, 'Drill', 'x', 1)");
 
@@ -191,7 +197,7 @@ class SchemaTest {
 
     @Test
     void rentalForMissingItemViolatesForeignKey() throws SQLException {
-        exec("INSERT INTO users(username) VALUES ('liisa')");
+        exec("INSERT INTO users (username, password) VALUES ('liisa', 'x')");
         assertFails("FOREIGN KEY constraint failed",
                 "INSERT INTO rentals(item_id, renter_id, start_time, end_time) "
                         + "VALUES (99, 1, '2026-06-16 14:30', '2026-06-19 14:30')");
