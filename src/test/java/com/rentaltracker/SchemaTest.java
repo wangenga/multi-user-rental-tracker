@@ -121,14 +121,16 @@ class SchemaTest {
 
     @Test
     void blankUsernameViolatesCheck() {
-        assertFails("CHECK constraint failed", "INSERT INTO users (username, password) VALUES ('   ')");
+        assertFails("CHECK constraint failed",
+                "INSERT INTO users(username, password) VALUES ('   ', 'x')");
     }
-
+    
     @Test
     void nullUsernameViolatesNotNull() {
-        assertFails("NOT NULL constraint failed", "INSERT INTO users (username, password) VALUES (NULL)");
+        assertFails("NOT NULL constraint failed: users.username",
+                "INSERT INTO users(username, password) VALUES (NULL, 'x')");
     }
-
+    
     @Test
     void userWithoutPasswordViolatesNotNull() {
         assertFails("NOT NULL constraint failed: users.password",

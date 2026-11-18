@@ -39,7 +39,7 @@ class MainTest {
 
     @Test
     void resolvePath_usesDefaultWhenNoArgs() {
-        assertEquals("data/local.db", Main.resolvePath(new String[0]));
+        assertEquals("data/multiUser.db", Main.resolvePath(new String[0]));
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.rentaltracker.security;
 
 import com.password4j.BcryptFunction;
 import com.password4j.Password;
+import com.password4j.types.Bcrypt;
 
 public class BcryptPasswordHasher implements PasswordHasher {
 
@@ -18,7 +19,7 @@ public class BcryptPasswordHasher implements PasswordHasher {
         if (cost < MIN_COST || cost > 31) {
             throw new IllegalArgumentException("bcrypt cost must be between 4 and 31");
         }
-        this.bcrypt = BcryptFunction.getInstance(BcryptFunction.Bcrypt.B, cost);
+        this.bcrypt = BcryptFunction.getInstance(Bcrypt.B, cost);
     }
 
     @Override
@@ -34,6 +35,12 @@ public class BcryptPasswordHasher implements PasswordHasher {
         if (plainPassword == null || storedHash == null || storedHash.isBlank()) {
             return false;
         }
-        return Password.check(plainPassword, storedHash).with(bcrypt);
+        try {
+            // read the settings from the hash itself, so any cost verifies correctly
+            return Password.check(plainPassword, storedHash)
+                    .with(BcryptFunction.getInstanceFromHash(storedHash));
+        } catch (RuntimeException e) {
+            return false;   // a malformed hash never matches
+        }
     }
 }
