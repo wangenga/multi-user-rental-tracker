@@ -14,6 +14,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -329,6 +330,7 @@ class RentalServiceTest {
         }
     
         @Test
+        @Disabled("single-owner design, replaced by browse-and-rent")
         void recordRentalCreatesAnUnknownRenterWithANormalisedUsername() throws SQLException {
             long itemId = addItem(1, "Ladder", ItemStatus.available);
     
