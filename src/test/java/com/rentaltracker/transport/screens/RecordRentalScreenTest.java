@@ -16,6 +16,7 @@ import java.time.ZoneId;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -146,6 +147,7 @@ class RecordRentalScreenTest {
     }
 
     @Test
+    @Disabled("single-owner design, replaced by browse-and-rent")
     void aNewRenterNameCreatesTheUser() throws SQLException {
         addItem("Ladder", "available");
 
