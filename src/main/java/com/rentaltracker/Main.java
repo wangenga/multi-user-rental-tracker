@@ -8,12 +8,16 @@ import java.nio.file.Path;
 import java.time.Clock;
 
 import com.rentaltracker.infrastructure.Database;
+import com.rentaltracker.logging.AppLogger;
+import com.rentaltracker.logging.NoOpLogger;
 import com.rentaltracker.repository.ItemRepository;
 import com.rentaltracker.repository.RentalRepository;
 import com.rentaltracker.repository.SqliteTransactor;
 import com.rentaltracker.repository.Transactor;
 import com.rentaltracker.repository.UserRepository;
 import com.rentaltracker.repository.exception.RepositoryException;
+import com.rentaltracker.security.BcryptPasswordHasher;
+import com.rentaltracker.service.AuthService;
 import com.rentaltracker.service.ItemService;
 import com.rentaltracker.service.RentalService;
 import com.rentaltracker.service.UserService;
@@ -52,12 +56,16 @@ public class Main {
         RentalRepository rentalRepository = new RentalRepository(db);
         Transactor tx = new SqliteTransactor(db);
 
+        // TODO: swap NoOpLogger for the file logger once it exists
+        AppLogger logger = new NoOpLogger();
+
         UserService users = new UserService(userRepository);
+        AuthService auth = new AuthService(userRepository, new BcryptPasswordHasher(), logger);
         ItemService items = new ItemService(itemRepository, rentalRepository, users, tx);
         RentalService rentals = new RentalService(itemRepository, rentalRepository, users, tx, clock);
 
         return new MainMenu(prompter,
-                new StartupScreen(prompter, users),
+                new StartupScreen(prompter, auth),
                 new ListItemScreen(prompter, items),
                 new InventoryScreen(prompter, items),
                 new RecordRentalScreen(prompter, rentals),

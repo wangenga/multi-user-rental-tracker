@@ -28,6 +28,7 @@ import com.rentaltracker.repository.UserRepository;
 import com.rentaltracker.service.RentalService;
 import com.rentaltracker.service.UserService;
 import com.rentaltracker.transport.Display;
+import com.rentaltracker.service.Session;
 import com.rentaltracker.transport.Prompter;
 import com.rentaltracker.transport.exception.InputClosedException;
 
@@ -81,7 +82,7 @@ class RecordRentalScreenTest {
 
     @Test
     void anEmptyListSaysSoAndNeverAsksForInput() {
-        screen("").run(1);
+        screen("").run(new Session(1, "tester"));
 
         assertTrue(output().contains("No items are available to rent."));
     }
@@ -92,7 +93,7 @@ class RecordRentalScreenTest {
         addItem("Drill", "rented");
         addItem("Tent", "unlisted");
 
-        screen("2\n").run(1);   // one row, so Back is 2
+        screen("2\n").run(new Session(1, "tester"));   // one row, so Back is 2
 
         assertTrue(output().contains("1) " + Display.row("Ladder", "5 per day")));
         assertFalse(output().contains("Drill"));
@@ -103,7 +104,7 @@ class RecordRentalScreenTest {
     void theDetailViewShowsTheItemAndTheRentOption() throws SQLException {
         addItem("Ladder", "available");
 
-        screen("1\n2\n2\n").run(1);   // open it, back to the list, back to the menu
+        screen("1\n2\n2\n").run(new Session(1, "tester"));   // open it, back to the list, back to the menu
 
         assertTrue(output().contains("=== Ladder ==="));
         assertTrue(output().contains("6-step ladder"));
@@ -116,7 +117,7 @@ class RecordRentalScreenTest {
         exec("INSERT INTO listed_items (owner_id, item_name, description, cost_per_day) "
            + "VALUES (1, 'Ladder', '', 5)");
 
-        screen("1\n2\n2\n").run(1);
+        screen("1\n2\n2\n").run(new Session(1, "tester"));
 
         assertTrue(output().contains(Display.row("description", "-")));
     }
@@ -125,7 +126,7 @@ class RecordRentalScreenTest {
     void goingBackFromTheDetailRecordsNothing() throws SQLException {
         long id = addItem("Ladder", "available");
 
-        screen("1\n2\n2\n").run(1);
+        screen("1\n2\n2\n").run(new Session(1, "tester"));
 
         assertEquals("0", rentalCount());
         assertEquals("available", query("SELECT status FROM listed_items WHERE item_id = " + id));
@@ -136,7 +137,7 @@ class RecordRentalScreenTest {
         long id = addItem("Ladder", "available");
 
         // open, rent, renter, days. The list is then empty, so no further input is needed
-        screen("1\n1\nmeelis\n3\n").run(1);
+        screen("1\n1\nmeelis\n3\n").run(new Session(1, "tester"));
 
         assertTrue(output().contains("Rented Ladder to meelis until 2026-06-19 14:30."));
         assertEquals("rented", query("SELECT status FROM listed_items WHERE item_id = " + id));
@@ -151,7 +152,7 @@ class RecordRentalScreenTest {
     void aNewRenterNameCreatesTheUser() throws SQLException {
         addItem("Ladder", "available");
 
-        screen("1\n1\nnewperson\n2\n").run(1);
+        screen("1\n1\nnewperson\n2\n").run(new Session(1, "tester"));
 
         assertEquals("3", query("SELECT count(*) FROM users"));
         assertEquals("newperson", query("SELECT username FROM users WHERE id = 3"));
@@ -161,7 +162,7 @@ class RecordRentalScreenTest {
     void aBlankRenterNameIsAskedAgain() throws SQLException {
         addItem("Ladder", "available");
 
-        screen("1\n1\n\n   \nmeelis\n3\n").run(1);
+        screen("1\n1\n\n   \nmeelis\n3\n").run(new Session(1, "tester"));
 
         assertTrue(output().contains("Please enter a value."));
         assertEquals("1", rentalCount());
@@ -171,7 +172,7 @@ class RecordRentalScreenTest {
     void aNonNumericDayCountIsAskedAgain() throws SQLException {
         addItem("Ladder", "available");
 
-        screen("1\n1\nmeelis\nabc\n3\n").run(1);
+        screen("1\n1\nmeelis\nabc\n3\n").run(new Session(1, "tester"));
 
         assertTrue(output().contains("Please enter a whole number."));
         assertEquals("1", rentalCount());
@@ -182,7 +183,7 @@ class RecordRentalScreenTest {
         long id = addItem("Ladder", "available");
 
         // 0 days is rejected by the service, the message is printed, the list comes back, Back is 2
-        screen("1\n1\nmeelis\n0\n2\n").run(1);
+        screen("1\n1\nmeelis\n0\n2\n").run(new Session(1, "tester"));
 
         assertTrue(output().contains("Days must be between 1 and 365"));
         assertEquals("0", rentalCount());
@@ -193,7 +194,7 @@ class RecordRentalScreenTest {
     void anInvalidRenterNameIsPrintedAndNothingIsRecorded() throws SQLException {
         addItem("Ladder", "available");
 
-        screen("1\n1\nab\n3\n2\n").run(1);   // too short for a username
+        screen("1\n1\nab\n3\n2\n").run(new Session(1, "tester"));   // too short for a username
 
         assertTrue(output().contains("at least 3 characters"));
         assertEquals("0", rentalCount());
@@ -204,6 +205,6 @@ class RecordRentalScreenTest {
     void endOfInputExitsTheScreenWithAnException() throws SQLException {
         addItem("Ladder", "available");
 
-        assertThrows(InputClosedException.class, () -> screen("").run(1));
+        assertThrows(InputClosedException.class, () -> screen("").run(new Session(1, "tester")));
     }
 }

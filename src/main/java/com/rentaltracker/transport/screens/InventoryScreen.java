@@ -7,6 +7,7 @@ import com.rentaltracker.domain.ItemDomain;
 import com.rentaltracker.domain.enums.ItemStatus;
 import com.rentaltracker.service.ItemDetail;
 import com.rentaltracker.service.ItemService;
+import com.rentaltracker.service.Session;
 import com.rentaltracker.service.exception.BusinessRuleException;
 import com.rentaltracker.transport.Display;
 import com.rentaltracker.transport.ListMenu;
@@ -23,10 +24,10 @@ public class InventoryScreen {
         this.items = items;
     }
 
-    /** Every item the owner has, in any status. Reloaded each time so a status change shows up. */
-    public void run(int ownerId) {
+    /** Every item the logged-in user owns, in any status. Reloaded each time so a status change shows up. */
+    public void run(Session session) {
         while (true) {
-            List<ItemDomain> all = items.getItemsByOwner(ownerId);   // this line must exist, in scope, before choose
+            List<ItemDomain> all = items.getItemsByOwner(session.userId());
             Optional<ItemDomain> picked = listMenu.choose(
                 "My inventory",
                 "You have not listed any items yet.",

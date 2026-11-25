@@ -23,6 +23,7 @@ import com.rentaltracker.repository.SqliteTransactor;
 import com.rentaltracker.repository.UserRepository;
 import com.rentaltracker.service.ItemService;
 import com.rentaltracker.service.UserService;
+import com.rentaltracker.service.Session;
 import com.rentaltracker.transport.Prompter;
 import com.rentaltracker.transport.exception.InputClosedException;
 
@@ -68,7 +69,7 @@ class ListItemScreenTest {
 
     @Test
     void listingAnItemStoresItAsAvailableAndConfirms() throws SQLException {
-        screen("Ladder\n6-step ladder\n5\n").run(1);
+        screen("Ladder\n6-step ladder\n5\n").run(new Session(1, "tester"));
 
         assertTrue(output().contains("=== List an item ==="));
         assertTrue(output().contains("Listed Ladder at 5 per day."));
@@ -82,14 +83,14 @@ class ListItemScreenTest {
 
     @Test
     void theItemBelongsToTheOwnerPassedToTheScreen() throws SQLException {
-        screen("Saw\nHand saw\n8\n").run(2);
+        screen("Saw\nHand saw\n8\n").run(new Session(2, "tester"));
 
         assertEquals("2", query("SELECT owner_id FROM listed_items"));
     }
 
     @Test
     void aBlankDescriptionIsAllowedAndStoredAsEmptyText() throws SQLException {
-        screen("Ladder\n\n5\n").run(1);
+        screen("Ladder\n\n5\n").run(new Session(1, "tester"));
 
         assertEquals("", query("SELECT description FROM listed_items"));
         assertTrue(output().contains("Listed Ladder at 5 per day."));
@@ -97,7 +98,7 @@ class ListItemScreenTest {
 
     @Test
     void aBlankNameIsAskedAgain() throws SQLException {
-        screen("\n   \nLadder\nx\n5\n").run(1);
+        screen("\n   \nLadder\nx\n5\n").run(new Session(1, "tester"));
 
         assertTrue(output().contains("Please enter a value."));
         assertEquals("1", itemCount());
@@ -106,7 +107,7 @@ class ListItemScreenTest {
 
     @Test
     void aNonNumericCostIsAskedAgain() throws SQLException {
-        screen("Ladder\nx\nabc\n1.5\n5\n").run(1);
+        screen("Ladder\nx\nabc\n1.5\n5\n").run(new Session(1, "tester"));
 
         assertTrue(output().contains("Please enter a whole number."));
         assertEquals("5", query("SELECT cost_per_day FROM listed_items"));
@@ -115,7 +116,7 @@ class ListItemScreenTest {
     @Test
     void aCostBelowOneIsRejectedByTheServiceAndNothingIsStoredOrConfirmed() throws SQLException {
         // the screen does not catch it, MainMenu reports it
-        assertThrows(IllegalArgumentException.class, () -> screen("Ladder\nx\n0\n").run(1));
+        assertThrows(IllegalArgumentException.class, () -> screen("Ladder\nx\n0\n").run(new Session(1, "tester")));
 
         assertEquals("0", itemCount());
         assertFalse(output().contains("Listed "));
@@ -123,7 +124,7 @@ class ListItemScreenTest {
 
     @Test
     void anUnknownOwnerIsRejectedAndNothingIsStored() throws SQLException {
-        assertThrows(RuntimeException.class, () -> screen("Ladder\nx\n5\n").run(99));
+        assertThrows(RuntimeException.class, () -> screen("Ladder\nx\n5\n").run(new Session(99, "tester")));
 
         assertEquals("0", itemCount());
         assertFalse(output().contains("Listed "));
@@ -131,8 +132,8 @@ class ListItemScreenTest {
 
     @Test
     void endOfInputPartWayThroughStoresNothing() throws SQLException {
-        assertThrows(InputClosedException.class, () -> screen("Ladder\n").run(1));
-        assertThrows(InputClosedException.class, () -> screen("").run(1));
+        assertThrows(InputClosedException.class, () -> screen("Ladder\n").run(new Session(1, "tester")));
+        assertThrows(InputClosedException.class, () -> screen("").run(new Session(1, "tester")));
 
         assertEquals("0", itemCount());
     }

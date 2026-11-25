@@ -2,6 +2,7 @@ package com.rentaltracker.transport.screens;
 
 import com.rentaltracker.domain.ItemDomain;
 import com.rentaltracker.service.ItemService;
+import com.rentaltracker.service.Session;
 import com.rentaltracker.transport.Prompter;
 
 /**
@@ -19,14 +20,15 @@ public class ListItemScreen {
         this.items = items;
     }
 
-    public void run(int ownerId) {
+    /** The new item always belongs to the logged-in user. */
+    public void run(Session session) {
         prompter.println();
         prompter.println("=== List an item ===");
         String name = prompter.askNonBlank("Name: ");
         String description = prompter.ask("Description (optional): ");
         int costPerDay = prompter.askInt("Cost per day: ");
 
-        ItemDomain item = items.createItem(ownerId, name, description, costPerDay);
+        ItemDomain item = items.createItem(session.userId(), name, description, costPerDay);
         prompter.println("Listed " + item.getItemName() + " at " + item.getCostPerDay() + " per day.");
     }
 }

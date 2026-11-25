@@ -6,6 +6,7 @@ import java.util.Optional;
 import com.rentaltracker.domain.enums.ItemStatus;
 import com.rentaltracker.domain.view.ActiveRentalView;
 import com.rentaltracker.service.RentalService;
+import com.rentaltracker.service.Session;
 import com.rentaltracker.service.exception.BusinessRuleException;
 import com.rentaltracker.transport.Display;
 import com.rentaltracker.transport.ListMenu;
@@ -23,9 +24,10 @@ public class ConfirmReturnScreen {
         this.rentals = rentals;
     }
 
-    public void run(int ownerId) {
+    /** Active rentals on the logged-in user's items. */
+    public void run(Session session) {
         while (true) {
-            List<ActiveRentalView> active = rentals.getActiveRentalViews(ownerId);
+            List<ActiveRentalView> active = rentals.getActiveRentalViews(session.userId());
             Optional<ActiveRentalView> picked = listMenu.choose(
                     "Confirm return",
                     "Nothing is out on rental.",

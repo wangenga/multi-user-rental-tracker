@@ -38,6 +38,19 @@ class PrompterTest {
     }
 
     @Test
+    void askPassword_returnsTheLineExactlyAsTyped() {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        assertEquals("  spaced pass  ", prompter("  spaced pass  \n", out).askPassword("Password: "));
+        assertTrue(out.toString(StandardCharsets.UTF_8).contains("Password: "));
+    }
+
+    @Test
+    void askPassword_throwsWhenInputClosed() {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        assertThrows(InputClosedException.class, () -> prompter("", out).askPassword("> "));
+    }
+
+    @Test
     void askNonBlank_skipsBlankLines() {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         String answer = prompter("\n   \nreal\n", out).askNonBlank("> ");

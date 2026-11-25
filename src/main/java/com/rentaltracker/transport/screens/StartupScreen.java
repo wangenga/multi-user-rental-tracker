@@ -1,42 +1,62 @@
 package com.rentaltracker.transport.screens;
 
-import java.util.Optional;
-
-import com.rentaltracker.domain.User;
-import com.rentaltracker.service.UserService;
+import com.rentaltracker.service.AuthService;
+import com.rentaltracker.service.Session;
+import com.rentaltracker.service.exception.AuthenticationException;
+import com.rentaltracker.service.exception.ValidationException;
 import com.rentaltracker.transport.Prompter;
 
 /**
- * The owner is the lowest-id user. On first launch there is no user yet,
- * so the screen asks for a username and creates the owner account.
+ * The first screen: log in or register. It loops until one of them succeeds,
+ * so the main menu only ever starts with a logged-in user.
  */
 public class StartupScreen {
 
-    private final Prompter prompter;
-    private final UserService users;
+    private static final int LOG_IN = 1;
+    private static final int REGISTER = 2;
 
-    public StartupScreen(Prompter prompter, UserService users) {
+    private final Prompter prompter;
+    private final AuthService auth;
+
+    public StartupScreen(Prompter prompter, AuthService auth) {
         this.prompter = prompter;
-        this.users = users;
+        this.auth = auth;
     }
 
-    public User run() {
-        Optional<User> owner = users.findOwner();
-        if (owner.isPresent()) {
-            prompter.println("Welcome back, " + owner.get().getUsername() + ".");
-            return owner.get();
-        }
-
-        prompter.println("Welcome! Let's set up your account.");
+    /** @return the session of the user who logged in or just registered */
+    public Session run() {
         while (true) {
-            String name = prompter.askNonBlank("Username: ");
+            showAccountQuestion();
+            int choice = prompter.askChoice("> ", LOG_IN, REGISTER);
             try {
-                User created = users.createOwner(name);
-                prompter.println("Account created. Hello, " + created.getUsername() + ".");
-                return created;
-            } catch (IllegalArgumentException e) {
+                Session session = choice == LOG_IN ? logIn() : register();
+                prompter.println("Welcome, " + session.username() + ".");
+                return session;
+            } catch (AuthenticationException | ValidationException e) {
+                // a wrong password, a taken username, a too-short password: show it and ask again
                 prompter.println(e.getMessage());
             }
         }
+    }
+
+    private void showAccountQuestion() {
+        prompter.println();
+        prompter.println("=== Rental tracker ===");
+        prompter.println("Do you have an account?");
+        prompter.println("1) Log in");
+        prompter.println("2) Register");
+    }
+
+    private Session logIn() {
+        String username = prompter.ask("Username: ");
+        String password = prompter.askPassword("Password: ");
+        return auth.login(username, password);
+    }
+
+    /** A new account is logged in straight away, so the user goes on to the menu. */
+    private Session register() {
+        String username = prompter.ask("Choose a username: ");
+        String password = prompter.askPassword("Choose a password: ");
+        return Session.of(auth.register(username, password));
     }
 }

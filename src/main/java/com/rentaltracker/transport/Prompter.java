@@ -27,6 +27,15 @@ public class Prompter {
 
     /** Prints the prompt and returns the next line, trimmed. */
     public String ask(String prompt) {
+        return readLine(prompt).trim();
+    }
+
+    /** Like ask, but the line is returned exactly as typed: spaces are part of a password. */
+    public String askPassword(String prompt) {
+        return readLine(prompt);
+    }
+
+    private String readLine(String prompt) {
         out.print(prompt);
         out.flush();
         try {
@@ -34,7 +43,7 @@ public class Prompter {
             if (line == null) {
                 throw new InputClosedException();
             }
-            return line.trim();
+            return line;
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

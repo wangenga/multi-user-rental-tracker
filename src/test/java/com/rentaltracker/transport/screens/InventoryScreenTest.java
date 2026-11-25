@@ -24,6 +24,7 @@ import com.rentaltracker.repository.UserRepository;
 import com.rentaltracker.service.ItemService;
 import com.rentaltracker.service.UserService;
 import com.rentaltracker.transport.Display;
+import com.rentaltracker.service.Session;
 import com.rentaltracker.transport.Prompter;
 import com.rentaltracker.transport.exception.InputClosedException;
 
@@ -82,7 +83,7 @@ class InventoryScreenTest {
 
     @Test
     void anEmptyInventorySaysSoAndNeverAsksForInput() {
-        screen("").run(1);
+        screen("").run(new Session(1, "tester"));
 
         assertTrue(output().contains("You have not listed any items yet."));
     }
@@ -94,7 +95,7 @@ class InventoryScreenTest {
         addItem(1, "Tent", "unlisted");
         addItem(3, "Saw", "available");   // someone else's
 
-        screen("4\n").run(1);   // 3 rows, so Back is 4
+        screen("4\n").run(new Session(1, "tester"));   // 3 rows, so Back is 4
 
         assertTrue(output().contains("1) Ladder"));
         assertTrue(output().contains("2) Drill"));
@@ -109,7 +110,7 @@ class InventoryScreenTest {
     void theDetailViewShowsTheItemFieldsAndTheOwner() throws SQLException {
         addItem(1, "Ladder", "available");
 
-        screen("1\n2\n2\n").run(1);   // open it, back to the list, back to the menu
+        screen("1\n2\n2\n").run(new Session(1, "tester"));   // open it, back to the list, back to the menu
 
         assertTrue(output().contains("=== Ladder ==="));
         assertTrue(output().contains("6-step ladder"));
@@ -123,7 +124,7 @@ class InventoryScreenTest {
         exec("INSERT INTO listed_items (owner_id, item_name, description, cost_per_day) "
            + "VALUES (1, 'Ladder', '', 5)");
 
-        screen("1\n2\n2\n").run(1);
+        screen("1\n2\n2\n").run(new Session(1, "tester"));
 
         assertTrue(output().contains(Display.row("description", "-")));
     }
@@ -132,7 +133,7 @@ class InventoryScreenTest {
     void goingBackFromTheDetailLeavesTheStatusAlone() throws SQLException {
         long id = addItem(1, "Ladder", "available");
 
-        screen("1\n2\n2\n").run(1);
+        screen("1\n2\n2\n").run(new Session(1, "tester"));
 
         assertEquals("available", status(id));
     }
@@ -141,7 +142,7 @@ class InventoryScreenTest {
     void delistingAnAvailableItemMakesItUnlisted() throws SQLException {
         long id = addItem(1, "Ladder", "available");
 
-        screen("1\n1\n2\n").run(1);   // open, delist, then Back from the rebuilt list
+        screen("1\n1\n2\n").run(new Session(1, "tester"));   // open, delist, then Back from the rebuilt list
 
         assertTrue(output().contains("Ladder is now unlisted."));
         assertEquals("unlisted", status(id));
@@ -152,7 +153,7 @@ class InventoryScreenTest {
         long id = addItem(1, "Ladder", "rented");
         addActiveRental(id);
 
-        screen("1\n1\n2\n").run(1);
+        screen("1\n1\n2\n").run(new Session(1, "tester"));
 
         assertEquals("unlisted", status(id));
         assertEquals("active", query("SELECT status FROM rentals WHERE item_id = " + id));
@@ -162,7 +163,7 @@ class InventoryScreenTest {
     void anUnlistedItemOffersRelistAndRelistsIt() throws SQLException {
         long id = addItem(1, "Tent", "unlisted");
 
-        screen("1\n1\n2\n").run(1);
+        screen("1\n1\n2\n").run(new Session(1, "tester"));
 
         assertTrue(output().contains("1) Relist"));
         assertFalse(output().contains("1) Delist"));
@@ -175,7 +176,7 @@ class InventoryScreenTest {
         long id = addItem(1, "Ladder", "unlisted");
         addActiveRental(id);
 
-        screen("1\n1\n2\n").run(1);
+        screen("1\n1\n2\n").run(new Session(1, "tester"));
 
         assertTrue(output().contains("Confirm the return first"));
         assertEquals("unlisted", status(id));
@@ -185,7 +186,7 @@ class InventoryScreenTest {
     void theListIsShownAgainAfterAnActionWithTheNewStatus() throws SQLException {
         addItem(1, "Ladder", "available");
 
-        screen("1\n1\n2\n").run(1);   // delist, then the list comes back
+        screen("1\n1\n2\n").run(new Session(1, "tester"));   // delist, then the list comes back
 
         int firstList = output().indexOf("=== My inventory");
         int secondList = output().indexOf("=== My inventory", firstList + 1);
@@ -200,7 +201,7 @@ class InventoryScreenTest {
         }
 
         // Next page (6), open the only row on page 2 (1), back to the list (2), Back from page 1 (7)
-        screen("6\n1\n2\n7\n").run(1);
+        screen("6\n1\n2\n7\n").run(new Session(1, "tester"));
 
         assertTrue(output().contains("(page 1 of 2)"));
         assertTrue(output().contains("(page 2 of 2)"));
@@ -212,6 +213,6 @@ class InventoryScreenTest {
     void endOfInputExitsTheScreenWithAnException() throws SQLException {
         addItem(1, "Ladder", "available");
 
-        assertThrows(InputClosedException.class, () -> screen("").run(1));
+        assertThrows(InputClosedException.class, () -> screen("").run(new Session(1, "tester")));
     }
 }

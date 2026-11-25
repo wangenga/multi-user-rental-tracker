@@ -6,6 +6,7 @@ import java.util.Optional;
 import com.rentaltracker.domain.ItemDomain;
 import com.rentaltracker.domain.RentalDomain;
 import com.rentaltracker.service.RentalService;
+import com.rentaltracker.service.Session;
 import com.rentaltracker.service.exception.BusinessRuleException;
 import com.rentaltracker.transport.Display;
 import com.rentaltracker.transport.ListMenu;
@@ -23,9 +24,9 @@ public class RecordRentalScreen {
         this.rentals = rentals;
     }
 
-    public void run(int ownerId) {
+    public void run(Session session) {
         while (true) {
-            List<ItemDomain> available = rentals.getRentableItems(ownerId);
+            List<ItemDomain> available = rentals.getRentableItems(session.userId());
             Optional<ItemDomain> picked = listMenu.choose(
                 "Record a rental",
                 "No items are available to rent.",

@@ -27,6 +27,7 @@ import com.rentaltracker.repository.UserRepository;
 import com.rentaltracker.service.RentalService;
 import com.rentaltracker.service.UserService;
 import com.rentaltracker.transport.Display;
+import com.rentaltracker.service.Session;
 import com.rentaltracker.transport.Prompter;
 import com.rentaltracker.transport.exception.InputClosedException;
 
@@ -82,7 +83,7 @@ class ConfirmReturnScreenTest {
 
     @Test
     void anEmptyListSaysSoAndNeverAsksForInput() {
-        screen("").run(1);
+        screen("").run(new Session(1, "tester"));
 
         assertTrue(output().contains("Nothing is out on rental."));
     }
@@ -92,7 +93,7 @@ class ConfirmReturnScreenTest {
         addRental("Ladder", "rented", 2, "2026-06-25 10:00");
         addRental("Drill", "rented", 3, "2026-06-18 10:00");
 
-        screen("3\n").run(1);   // two rows, so Back is 3
+        screen("3\n").run(new Session(1, "tester"));   // two rows, so Back is 3
 
         int drill = output().indexOf("1) " + Display.row("Drill", "marili"));
         int ladder = output().indexOf("2) " + Display.row("Ladder", "meelis"));
@@ -103,7 +104,7 @@ class ConfirmReturnScreenTest {
     void theDetailViewUsesTheDisplayFormats() throws SQLException {
         addRental("Ladder", "rented", 2, "2026-06-19 14:30");
 
-        screen("1\n2\n2\n").run(1);
+        screen("1\n2\n2\n").run(new Session(1, "tester"));
 
         assertTrue(output().contains("=== Ladder ==="));
         assertTrue(output().contains(Display.row("renter", "meelis")));
@@ -119,7 +120,7 @@ class ConfirmReturnScreenTest {
     void goingBackFromTheDetailConfirmsNothing() throws SQLException {
         long rentalId = addRental("Ladder", "rented", 2, "2026-06-19 14:30");
 
-        screen("1\n2\n2\n").run(1);
+        screen("1\n2\n2\n").run(new Session(1, "tester"));
 
         assertEquals("active", query("SELECT status FROM rentals WHERE rental_id = " + rentalId));
     }
@@ -128,7 +129,7 @@ class ConfirmReturnScreenTest {
     void confirmingClosesTheRentalAndFreesTheItem() throws SQLException {
         long rentalId = addRental("Ladder", "rented", 2, "2026-06-19 14:30");
 
-        screen("1\n1\n").run(1);   // open, confirm, then the list is empty
+        screen("1\n1\n").run(new Session(1, "tester"));   // open, confirm, then the list is empty
 
         assertTrue(output().contains("Returned Ladder."));
         assertFalse(output().contains("stays unlisted"));
@@ -141,7 +142,7 @@ class ConfirmReturnScreenTest {
     void anItemDelistedWhileOutStaysUnlistedAndTheScreenSaysSo() throws SQLException {
         long rentalId = addRental("Ladder", "unlisted", 2, "2026-06-19 14:30");
 
-        screen("1\n1\n").run(1);
+        screen("1\n1\n").run(new Session(1, "tester"));
 
         assertTrue(output().contains("stays unlisted"));
         assertEquals("closed", query("SELECT status FROM rentals WHERE rental_id = " + rentalId));
@@ -153,7 +154,7 @@ class ConfirmReturnScreenTest {
         addRental("Ladder", "rented", 2, "2026-06-19 14:30");
         addRental("Drill", "rented", 3, "2026-06-25 10:00");
 
-        screen("1\n1\n2\n").run(1);   // return the first, then Back from the one-row list
+        screen("1\n1\n2\n").run(new Session(1, "tester"));   // return the first, then Back from the one-row list
 
         int secondList = output().indexOf("=== Confirm return", output().indexOf("=== Confirm return") + 1);
         assertTrue(secondList > 0);
@@ -165,6 +166,6 @@ class ConfirmReturnScreenTest {
     void endOfInputExitsTheScreenWithAnException() throws SQLException {
         addRental("Ladder", "rented", 2, "2026-06-19 14:30");
 
-        assertThrows(InputClosedException.class, () -> screen("").run(1));
+        assertThrows(InputClosedException.class, () -> screen("").run(new Session(1, "tester")));
     }
 }

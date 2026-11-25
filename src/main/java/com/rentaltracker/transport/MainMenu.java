@@ -1,6 +1,7 @@
 package com.rentaltracker.transport;
 
 import com.rentaltracker.repository.exception.RepositoryException;
+import com.rentaltracker.service.Session;
 import com.rentaltracker.service.exception.BusinessRuleException;
 import com.rentaltracker.transport.exception.InputClosedException;
 import com.rentaltracker.transport.screens.ConfirmReturnScreen;
@@ -31,18 +32,22 @@ public class MainMenu {
         this.confirmReturn = confirmReturn;
     }
 
-    /** Runs until the user exits or the input ends. */
+    /**
+     * Logs a user in, then runs the menu for them until they exit or the input ends.
+     * The session lives only in this method, so exiting is logging out: the next
+     * launch starts back at the login prompt.
+     */
     public void run() {
         try {
-            int ownerId = (int) startup.run().getId();
+            Session session = startup.run();
             while (true) {
                 showMenu();
                 int choice = prompter.askChoice("> ", 1, EXIT);
                 if (choice == EXIT) {
-                    prompter.println("Goodbye.");
+                    prompter.println("Logged out. Goodbye.");
                     return;
                 }
-                runScreen(choice, ownerId);
+                runScreen(choice, session);
             }
         } catch (InputClosedException e) {
             prompter.println();
@@ -62,13 +67,13 @@ public class MainMenu {
         prompter.println("5) Exit");
     }
 
-    private void runScreen(int choice, int ownerId) {
+    private void runScreen(int choice, Session session) {
         try {
             switch (choice) {
-                case 1 -> listItem.run(ownerId);
-                case 2 -> inventory.run(ownerId);
-                case 3 -> recordRental.run(ownerId);
-                default -> confirmReturn.run(ownerId);
+                case 1 -> listItem.run(session);
+                case 2 -> inventory.run(session);
+                case 3 -> recordRental.run(session);
+                default -> confirmReturn.run(session);
             }
         } catch (IllegalArgumentException | BusinessRuleException e) {
             prompter.println("Error: " + e.getMessage());
