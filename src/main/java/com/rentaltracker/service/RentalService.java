@@ -11,40 +11,35 @@ import com.rentaltracker.domain.RentalDomain;
 import com.rentaltracker.domain.enums.ItemStatus;
 import com.rentaltracker.domain.enums.RentalStatus;
 import com.rentaltracker.domain.view.ActiveRentalView;
+import com.rentaltracker.domain.view.ListingView;
 import com.rentaltracker.repository.ItemRepository;
 import com.rentaltracker.repository.RentalRepository;
 import com.rentaltracker.repository.Transactor;
 import com.rentaltracker.repository.exception.NotFoundException;
 import com.rentaltracker.repository.exception.SqlExceptionTranslator;
 import com.rentaltracker.service.exception.BusinessRuleException;
+import com.rentaltracker.service.exception.ValidationException;
+import com.rentaltracker.service.validation.RentalValidator;
 
 public class RentalService {
 
-    // Team decision: the spec sets no limit, this just prevents absurd dates
-    private static final int MAX_DAYS = 365;
-
     private final ItemRepository items;
     private final RentalRepository rentals;
-    private final UserService users;
     private final Transactor tx;
     private final Clock clock;
 
-    public RentalService(ItemRepository items, RentalRepository rentals, UserService users,
-                         Transactor tx, Clock clock) {
+    public RentalService(ItemRepository items, RentalRepository rentals, Transactor tx, Clock clock) {
         this.items = items;
         this.rentals = rentals;
-        this.users = users;
         this.tx = tx;
         this.clock = clock;
     }
 
     // ---------- reads ----------
 
-    /** The owner's items that can be rented right now (status available). */
-    public List<ItemDomain> getRentableItems(int ownerId) {
-        return db("list items", items::findAll).stream()
-                .filter(i -> i.getOwnerId() == ownerId && i.getStatus() == ItemStatus.available)
-                .toList();
+    /** Everything the viewer could rent right now: available items that belong to someone else. */
+    public List<ListingView> getListings(int viewerId) {
+        return items.findListingsExcludingOwner(viewerId);
     }
 
     /** Active rentals on the owner's items, soonest due date first. */
@@ -61,28 +56,32 @@ public class RentalService {
         return rentals.findViewById(rentalId);
     }
 
-    // ---------- record a rental ----------
+    // ---------- rent ----------
 
-    public RentalDomain recordRental(int itemId, String renterName, int days) {
-        if (renterName == null || renterName.isBlank()) {
-            throw new IllegalArgumentException("Renter name cannot be blank");
-        }
-        if (days < 1 || days > MAX_DAYS) {
-            throw new IllegalArgumentException("Days must be between 1 and " + MAX_DAYS);
-        }
-        String username = renterName.trim();
+    /**
+     * The logged-in user rents someone else's item for a number of days.
+     * Every rule is checked here, not trusted to the screen: the browse list already hides
+     * your own items, but a caller that skips the list is still refused.
+     *
+     * @throws ValidationException   if days is out of range
+     * @throws NotFoundException     if the item does not exist (or was deleted after browsing)
+     * @throws BusinessRuleException if it is your own item, already rented, or unlisted
+     */
+    public RentalDomain rent(int renterId, int itemId, int days) {
+        RentalValidator.validateDays(days);
 
         return tx.inTransaction(() -> {
             ItemDomain item = requireItem(itemId);
 
+            if (item.getOwnerId() == renterId) {
+                throw new BusinessRuleException("You cannot rent your own item: " + item.getItemName());
+            }
             if (item.getStatus() == ItemStatus.rented) {
                 throw new BusinessRuleException("Item is already rented: " + item.getItemName());
             }
             if (item.getStatus() == ItemStatus.unlisted) {
                 throw new BusinessRuleException("Item is unlisted and cannot be rented: " + item.getItemName());
             }
-
-            long renterId = findOrCreateRenterId(username);
 
             LocalDateTime start = now();
             LocalDateTime end = start.plusDays(days);
@@ -121,10 +120,6 @@ public class RentalService {
     }
 
     // ---------- helpers ----------
-
-    private long findOrCreateRenterId(String username) {
-        return users.findOrCreate(username).getId();
-    }
 
     /** Minute precision, because the database stores yyyy-MM-dd HH:mm. */
     private LocalDateTime now() {

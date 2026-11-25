@@ -23,9 +23,7 @@ import com.rentaltracker.infrastructure.Database;
 import com.rentaltracker.repository.ItemRepository;
 import com.rentaltracker.repository.RentalRepository;
 import com.rentaltracker.repository.SqliteTransactor;
-import com.rentaltracker.repository.UserRepository;
 import com.rentaltracker.service.RentalService;
-import com.rentaltracker.service.UserService;
 import com.rentaltracker.transport.Display;
 import com.rentaltracker.service.Session;
 import com.rentaltracker.transport.Prompter;
@@ -44,7 +42,7 @@ class ConfirmReturnScreenTest {
     void setUp() throws SQLException {
         db = new Database(tempDir.resolve("test.db").toString());
         rentals = new RentalService(new ItemRepository(db.connection()), new RentalRepository(db),
-                new UserService(new UserRepository(db)), new SqliteTransactor(db), CLOCK);
+                new SqliteTransactor(db), CLOCK);
         exec("INSERT INTO users (username, password) VALUES ('liisa', 'x'), ('meelis', 'x'), ('marili', 'x')");   // 1 owner, 2 and 3 renters
     }
 

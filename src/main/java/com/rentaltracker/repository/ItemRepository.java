@@ -2,6 +2,7 @@ package com.rentaltracker.repository;
 
 import com.rentaltracker.domain.ItemDomain;
 import com.rentaltracker.domain.enums.ItemStatus;
+import com.rentaltracker.domain.view.ListingView;
 import com.rentaltracker.infrastructure.DbTime;
 import com.rentaltracker.repository.exception.MappingException;
 import com.rentaltracker.repository.exception.SqlExceptionTranslator;
@@ -77,6 +78,36 @@ public class ItemRepository {
             throw SqlExceptionTranslator.translate("find all items", e);
         }
         return listedItems;
+    }
+
+    /**
+     * Items available to rent that belong to someone other than the viewer, with the
+     * owner's username. Highest cost first, then by name, so the order is stable between pages.
+     */
+    public List<ListingView> findListingsExcludingOwner(int viewerId) {
+        String sql = "SELECT i.item_id, i.item_name, i.description, i.cost_per_day, u.username "
+                   + "FROM listed_items i "
+                   + "JOIN users u ON u.id = i.owner_id "
+                   + "WHERE i.status = 'available' AND i.owner_id <> ? "
+                   + "ORDER BY i.cost_per_day DESC, i.item_name ASC, i.item_id ASC";
+        List<ListingView> listings = new ArrayList<>();
+
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, viewerId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    listings.add(new ListingView(
+                            resultSet.getInt("item_id"),
+                            resultSet.getString("item_name"),
+                            resultSet.getString("description"),
+                            resultSet.getInt("cost_per_day"),
+                            resultSet.getString("username")));
+                }
+            }
+        } catch (SQLException e) {
+            throw SqlExceptionTranslator.translate("find listings excluding owner", e);
+        }
+        return listings;
     }
 
     public void update(ItemDomain item)  {

@@ -7,7 +7,7 @@ import com.rentaltracker.transport.exception.InputClosedException;
 import com.rentaltracker.transport.screens.ConfirmReturnScreen;
 import com.rentaltracker.transport.screens.InventoryScreen;
 import com.rentaltracker.transport.screens.ListItemScreen;
-import com.rentaltracker.transport.screens.RecordRentalScreen;
+import com.rentaltracker.transport.screens.BrowseListingScreen;
 import com.rentaltracker.transport.screens.StartupScreen;
 import org.junit.jupiter.api.Test;
 
@@ -30,9 +30,9 @@ class MainMenuTest {
     /** Builds a MainMenu wired to mocks, with startup returning a user with the given id. */
     private MainMenu menu(String input, ByteArrayOutputStream out,
                           StartupScreen startup, ListItemScreen listItem,
-                          InventoryScreen inventory, RecordRentalScreen recordRental,
+                          InventoryScreen inventory, BrowseListingScreen browseListings,
                           ConfirmReturnScreen confirmReturn) {
-        return new MainMenu(prompter(input, out), startup, listItem, inventory, recordRental, confirmReturn);
+        return new MainMenu(prompter(input, out), startup, listItem, inventory, browseListings, confirmReturn);
     }
 
     private static Session session(int userId) {
@@ -56,7 +56,7 @@ class MainMenuTest {
         StartupScreen startup = startupReturning(1);
 
         menu("5\n", out, startup, mock(ListItemScreen.class), mock(InventoryScreen.class),
-                mock(RecordRentalScreen.class), mock(ConfirmReturnScreen.class)).run();
+                mock(BrowseListingScreen.class), mock(ConfirmReturnScreen.class)).run();
 
         String printed = out.toString(StandardCharsets.UTF_8);
         assertTrue(printed.contains("Logged out."));
@@ -69,13 +69,13 @@ class MainMenuTest {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
 
         menu("5\n", out, startupReturning(1), mock(ListItemScreen.class), mock(InventoryScreen.class),
-                mock(RecordRentalScreen.class), mock(ConfirmReturnScreen.class)).run();
+                mock(BrowseListingScreen.class), mock(ConfirmReturnScreen.class)).run();
 
         String printed = out.toString(StandardCharsets.UTF_8);
         assertTrue(printed.contains("=== Rental tracker ==="));
         assertTrue(printed.contains("1) List an item"));
         assertTrue(printed.contains("2) View my inventory"));
-        assertTrue(printed.contains("3) Record a rental"));
+        assertTrue(printed.contains("3) Browse listings"));
         assertTrue(printed.contains("4) Confirm a return"));
         assertTrue(printed.contains("5) Exit"));
     }
@@ -90,7 +90,7 @@ class MainMenuTest {
         StartupScreen startup = startupReturning(7);
 
         menu("1\n5\n", new ByteArrayOutputStream(), startup, listItem, mock(InventoryScreen.class),
-                mock(RecordRentalScreen.class), mock(ConfirmReturnScreen.class)).run();
+                mock(BrowseListingScreen.class), mock(ConfirmReturnScreen.class)).run();
 
         verify(listItem).run(session(7));
     }
@@ -101,20 +101,20 @@ class MainMenuTest {
         StartupScreen startup = startupReturning(7);
 
         menu("2\n5\n", new ByteArrayOutputStream(), startup, mock(ListItemScreen.class), inventory,
-                mock(RecordRentalScreen.class), mock(ConfirmReturnScreen.class)).run();
+                mock(BrowseListingScreen.class), mock(ConfirmReturnScreen.class)).run();
 
         verify(inventory).run(session(7));
     }
 
     @Test
-    void choice3_routesToRecordRentalWithOwnerId() {
-        RecordRentalScreen recordRental = mock(RecordRentalScreen.class);
+    void choice3_routesToBrowseListingsWithTheSession() {
+        BrowseListingScreen browseListings = mock(BrowseListingScreen.class);
         StartupScreen startup = startupReturning(7);
 
         menu("3\n5\n", new ByteArrayOutputStream(), startup, mock(ListItemScreen.class),
-                mock(InventoryScreen.class), recordRental, mock(ConfirmReturnScreen.class)).run();
+                mock(InventoryScreen.class), browseListings, mock(ConfirmReturnScreen.class)).run();
 
-        verify(recordRental).run(session(7));
+        verify(browseListings).run(session(7));
     }
 
     @Test
@@ -123,7 +123,7 @@ class MainMenuTest {
         StartupScreen startup = startupReturning(7);
 
         menu("4\n5\n", new ByteArrayOutputStream(), startup, mock(ListItemScreen.class),
-                mock(InventoryScreen.class), mock(RecordRentalScreen.class), confirmReturn).run();
+                mock(InventoryScreen.class), mock(BrowseListingScreen.class), confirmReturn).run();
 
         verify(confirmReturn).run(session(7));
     }
@@ -135,7 +135,7 @@ class MainMenuTest {
         StartupScreen startup = startupReturning(7);
 
         menu("1\n2\n5\n", new ByteArrayOutputStream(), startup, listItem, inventory,
-                mock(RecordRentalScreen.class), mock(ConfirmReturnScreen.class)).run();
+                mock(BrowseListingScreen.class), mock(ConfirmReturnScreen.class)).run();
 
         verify(listItem).run(session(7));
         verify(inventory).run(session(7));
@@ -145,16 +145,16 @@ class MainMenuTest {
     void ownerId_fromStartup_isForwardedToEveryScreen() {
         ListItemScreen listItem = mock(ListItemScreen.class);
         InventoryScreen inventory = mock(InventoryScreen.class);
-        RecordRentalScreen recordRental = mock(RecordRentalScreen.class);
+        BrowseListingScreen browseListings = mock(BrowseListingScreen.class);
         ConfirmReturnScreen confirmReturn = mock(ConfirmReturnScreen.class);
         StartupScreen startup = startupReturning(99);
 
         menu("1\n2\n3\n4\n5\n", new ByteArrayOutputStream(), startup, listItem, inventory,
-                recordRental, confirmReturn).run();
+                browseListings, confirmReturn).run();
 
         verify(listItem).run(session(99));
         verify(inventory).run(session(99));
-        verify(recordRental).run(session(99));
+        verify(browseListings).run(session(99));
         verify(confirmReturn).run(session(99));
     }
 
@@ -171,7 +171,7 @@ class MainMenuTest {
 
         // route choice 1 (throws), then exit
         menu("1\n5\n", out, startupReturning(1), ignored, mock(InventoryScreen.class),
-                mock(RecordRentalScreen.class), mock(ConfirmReturnScreen.class)).run();
+                mock(BrowseListingScreen.class), mock(ConfirmReturnScreen.class)).run();
 
         String printed = out.toString(StandardCharsets.UTF_8);
         assertTrue(printed.contains("Error: bad name"));
@@ -185,19 +185,19 @@ class MainMenuTest {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
 
         menu("2\n5\n", out, startupReturning(1), mock(ListItemScreen.class), inventory,
-                mock(RecordRentalScreen.class), mock(ConfirmReturnScreen.class)).run();
+                mock(BrowseListingScreen.class), mock(ConfirmReturnScreen.class)).run();
 
         assertTrue(out.toString(StandardCharsets.UTF_8).contains("Error: cannot delist"));
     }
 
     @Test
     void repositoryExceptionFromScreen_isPrintedAsDatabaseProblemAndMenuContinues() {
-        RecordRentalScreen recordRental = mock(RecordRentalScreen.class);
-        doThrow(new RepositoryException("disk full")).when(recordRental).run(any(Session.class));
+        BrowseListingScreen browseListings = mock(BrowseListingScreen.class);
+        doThrow(new RepositoryException("disk full")).when(browseListings).run(any(Session.class));
         ByteArrayOutputStream out = new ByteArrayOutputStream();
 
         menu("3\n5\n", out, startupReturning(1), mock(ListItemScreen.class),
-                mock(InventoryScreen.class), recordRental, mock(ConfirmReturnScreen.class)).run();
+                mock(InventoryScreen.class), browseListings, mock(ConfirmReturnScreen.class)).run();
 
         assertTrue(out.toString(StandardCharsets.UTF_8).contains("Database problem: disk full"));
         assertTrue(out.toString(StandardCharsets.UTF_8).contains("Goodbye."));
@@ -210,7 +210,7 @@ class MainMenuTest {
         doThrow(new BusinessRuleException("boom")).when(listItem).run(any(Session.class));
 
         menu("1\n2\n5\n", new ByteArrayOutputStream(), startupReturning(1), listItem, inventory,
-                mock(RecordRentalScreen.class), mock(ConfirmReturnScreen.class)).run();
+                mock(BrowseListingScreen.class), mock(ConfirmReturnScreen.class)).run();
 
         verify(inventory).run(session(1));
     }
@@ -226,7 +226,7 @@ class MainMenuTest {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
 
         menu("", out, startup, mock(ListItemScreen.class), mock(InventoryScreen.class),
-                mock(RecordRentalScreen.class), mock(ConfirmReturnScreen.class)).run();
+                mock(BrowseListingScreen.class), mock(ConfirmReturnScreen.class)).run();
 
         assertTrue(out.toString(StandardCharsets.UTF_8).contains("Database problem: db down"));
         // no menu header since startup failed before the loop
@@ -239,12 +239,12 @@ class MainMenuTest {
         when(startup.run()).thenThrow(new RepositoryException("db down"));
         ListItemScreen listItem = mock(ListItemScreen.class);
         InventoryScreen inventory = mock(InventoryScreen.class);
-        RecordRentalScreen recordRental = mock(RecordRentalScreen.class);
+        BrowseListingScreen browseListings = mock(BrowseListingScreen.class);
         ConfirmReturnScreen confirmReturn = mock(ConfirmReturnScreen.class);
 
-        menu("", new ByteArrayOutputStream(), startup, listItem, inventory, recordRental, confirmReturn).run();
+        menu("", new ByteArrayOutputStream(), startup, listItem, inventory, browseListings, confirmReturn).run();
 
-        verifyNoInteractions(listItem, inventory, recordRental, confirmReturn);
+        verifyNoInteractions(listItem, inventory, browseListings, confirmReturn);
     }
 
     @Test
@@ -254,7 +254,7 @@ class MainMenuTest {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
 
         menu("", out, startup, mock(ListItemScreen.class), mock(InventoryScreen.class),
-                mock(RecordRentalScreen.class), mock(ConfirmReturnScreen.class)).run();
+                mock(BrowseListingScreen.class), mock(ConfirmReturnScreen.class)).run();
 
         assertTrue(out.toString(StandardCharsets.UTF_8).contains("Goodbye."));
     }
@@ -267,7 +267,7 @@ class MainMenuTest {
         // one valid choice, then EOF — askChoice should raise InputClosedException
         assertDoesNotThrow(() ->
                 menu("1\n", new ByteArrayOutputStream(), startup, listItem, mock(InventoryScreen.class),
-                        mock(RecordRentalScreen.class), mock(ConfirmReturnScreen.class)).run());
+                        mock(BrowseListingScreen.class), mock(ConfirmReturnScreen.class)).run());
 
         verify(listItem).run(session(1));
     }

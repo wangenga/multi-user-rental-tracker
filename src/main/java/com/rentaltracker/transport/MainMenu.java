@@ -7,7 +7,7 @@ import com.rentaltracker.transport.exception.InputClosedException;
 import com.rentaltracker.transport.screens.ConfirmReturnScreen;
 import com.rentaltracker.transport.screens.InventoryScreen;
 import com.rentaltracker.transport.screens.ListItemScreen;
-import com.rentaltracker.transport.screens.RecordRentalScreen;
+import com.rentaltracker.transport.screens.BrowseListingScreen;
 import com.rentaltracker.transport.screens.StartupScreen;
 
 public class MainMenu {
@@ -18,17 +18,17 @@ public class MainMenu {
     private final StartupScreen startup;
     private final ListItemScreen listItem;
     private final InventoryScreen inventory;
-    private final RecordRentalScreen recordRental;
+    private final BrowseListingScreen browseListings;
     private final ConfirmReturnScreen confirmReturn;
 
     public MainMenu(Prompter prompter, StartupScreen startup, ListItemScreen listItem,
-                    InventoryScreen inventory, RecordRentalScreen recordRental,
+                    InventoryScreen inventory, BrowseListingScreen browseListings,
                     ConfirmReturnScreen confirmReturn) {
         this.prompter = prompter;
         this.startup = startup;
         this.listItem = listItem;
         this.inventory = inventory;
-        this.recordRental = recordRental;
+        this.browseListings = browseListings;
         this.confirmReturn = confirmReturn;
     }
 
@@ -62,7 +62,7 @@ public class MainMenu {
         prompter.println("=== Rental tracker ===");
         prompter.println("1) List an item");
         prompter.println("2) View my inventory");
-        prompter.println("3) Record a rental");
+        prompter.println("3) Browse listings");
         prompter.println("4) Confirm a return");
         prompter.println("5) Exit");
     }
@@ -72,7 +72,7 @@ public class MainMenu {
             switch (choice) {
                 case 1 -> listItem.run(session);
                 case 2 -> inventory.run(session);
-                case 3 -> recordRental.run(session);
+                case 3 -> browseListings.run(session);
                 default -> confirmReturn.run(session);
             }
         } catch (IllegalArgumentException | BusinessRuleException e) {

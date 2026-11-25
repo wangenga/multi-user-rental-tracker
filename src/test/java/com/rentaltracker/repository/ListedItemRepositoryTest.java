@@ -18,6 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.rentaltracker.domain.ItemDomain;
 import com.rentaltracker.domain.enums.ItemStatus;
+import com.rentaltracker.domain.view.ListingView;
 import com.rentaltracker.infrastructure.Database;
 import com.rentaltracker.repository.exception.MappingException;
 import com.rentaltracker.repository.exception.RepositoryException;
@@ -425,5 +426,57 @@ class ListedItemRepositoryTest {
         db.close();
 
         assertThrows(RepositoryException.class, () -> items.deleteById(1));
+    }
+
+    // =====================================================================
+    // findListingsExcludingOwner: what Browse listings shows
+    // =====================================================================
+
+    @Test
+    void listingsExcludeTheViewersItemsAndAnythingNotAvailable() throws SQLException {
+        saveItem(1, "Own ladder", "x", 5);
+        ItemDomain saw = saveItem(2, "Saw", "Hand saw", 3);
+        ItemDomain rented = saveItem(2, "Drill", "x", 4);
+        ItemDomain unlisted = saveItem(2, "Tent", "x", 6);
+        exec("UPDATE listed_items SET status = 'rented' WHERE item_id = " + rented.getItemId());
+        exec("UPDATE listed_items SET status = 'unlisted' WHERE item_id = " + unlisted.getItemId());
+
+        List<ListingView> listings = items.findListingsExcludingOwner(1);
+
+        assertEquals(1, listings.size());
+        ListingView only = listings.get(0);
+        assertEquals(saw.getItemId(), only.itemId());
+        assertEquals("Saw", only.itemName());
+        assertEquals("Hand saw", only.description());
+        assertEquals(3, only.costPerDay());
+        assertEquals("meelis", only.ownerUsername());
+    }
+
+    @Test
+    void listingsAreSortedByCostHighestFirstThenByName() throws SQLException {
+        exec("INSERT INTO users (username, password) VALUES ('marili', 'x')");   // user 3, the viewer
+        saveItem(1, "Ladder", "x", 5);
+        saveItem(2, "Pressure washer", "x", 8);
+        saveItem(1, "Circular saw", "x", 5);
+        saveItem(2, "Drill", "x", 4);
+
+        List<String> names = items.findListingsExcludingOwner(3).stream()
+                .map(ListingView::itemName).toList();
+
+        assertEquals(List.of("Pressure washer", "Circular saw", "Ladder", "Drill"), names);
+    }
+
+    @Test
+    void listingsAreEmptyWhenNobodyElseHasAnythingAvailable() throws SQLException {
+        saveItem(1, "Ladder", "x", 5);
+
+        assertTrue(items.findListingsExcludingOwner(1).isEmpty());
+    }
+
+    @Test
+    void findListingsOnClosedConnectionThrowsRepositoryException() {
+        db.close();
+
+        assertThrows(RepositoryException.class, () -> items.findListingsExcludingOwner(1));
     }
 }

@@ -26,7 +26,7 @@ import com.rentaltracker.transport.Prompter;
 import com.rentaltracker.transport.screens.ConfirmReturnScreen;
 import com.rentaltracker.transport.screens.InventoryScreen;
 import com.rentaltracker.transport.screens.ListItemScreen;
-import com.rentaltracker.transport.screens.RecordRentalScreen;
+import com.rentaltracker.transport.screens.BrowseListingScreen;
 import com.rentaltracker.transport.screens.StartupScreen;
 
 public class Main {
@@ -62,13 +62,13 @@ public class Main {
         UserService users = new UserService(userRepository);
         AuthService auth = new AuthService(userRepository, new BcryptPasswordHasher(), logger);
         ItemService items = new ItemService(itemRepository, rentalRepository, users, tx);
-        RentalService rentals = new RentalService(itemRepository, rentalRepository, users, tx, clock);
+        RentalService rentals = new RentalService(itemRepository, rentalRepository, tx, clock);
 
         return new MainMenu(prompter,
                 new StartupScreen(prompter, auth),
                 new ListItemScreen(prompter, items),
                 new InventoryScreen(prompter, items),
-                new RecordRentalScreen(prompter, rentals),
+                new BrowseListingScreen(prompter, rentals),
                 new ConfirmReturnScreen(prompter, rentals));
     }
 
