@@ -36,12 +36,13 @@ public class ConfirmReturnScreen {
             if (picked.isEmpty()) {
                 return;
             }
-            showDetail(picked.get().rentalId());
+            showDetail(picked.get().rentalId(), session);
         }
     }
 
-    private void showDetail(long rentalId) {
-        ActiveRentalView view = rentals.getRentalView(rentalId);
+    /** The service checks the logged-in user owns the rented item, for viewing and for confirming. */
+    private void showDetail(long rentalId, Session session) {
+        ActiveRentalView view = rentals.getRentalView(session.userId(), rentalId);
 
         prompter.println();
         prompter.println("=== " + view.itemName() + " ===");
@@ -57,7 +58,7 @@ public class ConfirmReturnScreen {
         }
 
         try {
-            var item = rentals.confirmReturn(rentalId);
+            var item = rentals.confirmReturn(session.userId(), rentalId);
             prompter.println("Returned " + view.itemName() + ".");
             if (item.getStatus() == ItemStatus.unlisted) {
                 prompter.println("It stays unlisted because it was delisted while out.");

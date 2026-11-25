@@ -12,18 +12,24 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.rentaltracker.domain.enums.RentalStatus;
+import com.rentaltracker.domain.view.ActiveRentalView;
 import com.rentaltracker.infrastructure.Database;
+import com.rentaltracker.logging.NoOpLogger;
 import com.rentaltracker.repository.ItemRepository;
 import com.rentaltracker.repository.RentalRepository;
 import com.rentaltracker.repository.SqliteTransactor;
 import com.rentaltracker.service.RentalService;
+import com.rentaltracker.service.exception.BusinessRuleException;
 import com.rentaltracker.transport.Display;
 import com.rentaltracker.service.Session;
 import com.rentaltracker.transport.Prompter;
@@ -42,7 +48,7 @@ class ConfirmReturnScreenTest {
     void setUp() throws SQLException {
         db = new Database(tempDir.resolve("test.db").toString());
         rentals = new RentalService(new ItemRepository(db.connection()), new RentalRepository(db),
-                new SqliteTransactor(db), CLOCK);
+                new SqliteTransactor(db), CLOCK, new NoOpLogger());
         exec("INSERT INTO users (username, password) VALUES ('liisa', 'x'), ('meelis', 'x'), ('marili', 'x')");   // 1 owner, 2 and 3 renters
     }
 
@@ -165,5 +171,37 @@ class ConfirmReturnScreenTest {
         addRental("Ladder", "rented", 2, "2026-06-19 14:30");
 
         assertThrows(InputClosedException.class, () -> screen("").run(new Session(1, "tester")));
+    }
+
+    @Test
+    void theScreenAsksTheServiceAsTheLoggedInUser() throws SQLException {
+        long rentalId = addRental("Ladder", "rented", 2, "2026-06-19 14:30");
+        RentalService spy = org.mockito.Mockito.spy(rentals);
+        Prompter prompter = new Prompter(new ByteArrayInputStream("1\n1\n".getBytes(UTF_8)),
+                new PrintStream(buffer, true, UTF_8));
+
+        new ConfirmReturnScreen(prompter, spy).run(new Session(1, "liisa"));
+
+        org.mockito.Mockito.verify(spy).getRentalView(1, rentalId);
+        org.mockito.Mockito.verify(spy).confirmReturn(1, rentalId);
+    }
+
+    @Test
+    void aConfirmRefusedByTheServiceIsShownAndTheUserStaysInTheScreen() {
+        // e.g. the same owner confirmed it from another session between opening and confirming
+        RentalService service = org.mockito.Mockito.mock(RentalService.class);
+        ActiveRentalView view = new ActiveRentalView(5, "Ladder", "meelis",
+                LocalDateTime.of(2026, 6, 16, 14, 30), LocalDateTime.of(2026, 6, 19, 14, 30), RentalStatus.ACTIVE);
+        org.mockito.Mockito.when(service.getActiveRentalViews(1)).thenReturn(List.of(view), List.of());
+        org.mockito.Mockito.when(service.getRentalView(1, 5)).thenReturn(view);
+        org.mockito.Mockito.when(service.confirmReturn(1, 5))
+                .thenThrow(new BusinessRuleException("Rental is already closed: 5"));
+        Prompter prompter = new Prompter(new ByteArrayInputStream("1\n1\n".getBytes(UTF_8)),
+                new PrintStream(buffer, true, UTF_8));
+
+        new ConfirmReturnScreen(prompter, service).run(new Session(1, "liisa"));
+
+        assertTrue(output().contains("Rental is already closed: 5"));
+        assertTrue(output().contains("Nothing is out on rental."));   // back on the (reloaded) list
     }
 }

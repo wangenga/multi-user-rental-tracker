@@ -1,8 +1,7 @@
 package com.rentaltracker.transport;
 
-import com.rentaltracker.repository.exception.RepositoryException;
+import com.rentaltracker.logging.AppLogger;
 import com.rentaltracker.service.Session;
-import com.rentaltracker.service.exception.BusinessRuleException;
 import com.rentaltracker.transport.exception.InputClosedException;
 import com.rentaltracker.transport.screens.ConfirmReturnScreen;
 import com.rentaltracker.transport.screens.InventoryScreen;
@@ -20,8 +19,9 @@ public class MainMenu {
     private final InventoryScreen inventory;
     private final BrowseListingScreen browseListings;
     private final ConfirmReturnScreen confirmReturn;
+    private final ErrorHandler errors;
 
-    public MainMenu(Prompter prompter, StartupScreen startup, ListItemScreen listItem,
+    public MainMenu(Prompter prompter, AppLogger logger, StartupScreen startup, ListItemScreen listItem,
                     InventoryScreen inventory, BrowseListingScreen browseListings,
                     ConfirmReturnScreen confirmReturn) {
         this.prompter = prompter;
@@ -30,6 +30,7 @@ public class MainMenu {
         this.inventory = inventory;
         this.browseListings = browseListings;
         this.confirmReturn = confirmReturn;
+        this.errors = new ErrorHandler(prompter, logger);
     }
 
     /**
@@ -52,8 +53,9 @@ public class MainMenu {
         } catch (InputClosedException e) {
             prompter.println();
             prompter.println("Goodbye.");
-        } catch (RepositoryException e) {
-            prompter.println("Database problem: " + e.getMessage());
+        } catch (RuntimeException e) {
+            // nobody is logged in yet, so there is no menu to go back to
+            errors.handle("startup", e);
         }
     }
 
@@ -67,7 +69,14 @@ public class MainMenu {
         prompter.println("5) Exit");
     }
 
+    /** Any failure inside a screen is shown, logged, and the user lands back on the menu. */
     private void runScreen(int choice, Session session) {
+        String operation = switch (choice) {
+            case 1 -> "list_item";
+            case 2 -> "inventory";
+            case 3 -> "browse_listings";
+            default -> "confirm_return";
+        };
         try {
             switch (choice) {
                 case 1 -> listItem.run(session);
@@ -75,10 +84,10 @@ public class MainMenu {
                 case 3 -> browseListings.run(session);
                 default -> confirmReturn.run(session);
             }
-        } catch (IllegalArgumentException | BusinessRuleException e) {
-            prompter.println("Error: " + e.getMessage());
-        } catch (RepositoryException e) {
-            prompter.println("Database problem: " + e.getMessage());
+        } catch (InputClosedException e) {
+            throw e;   // not an error: the input ended, so run() says goodbye
+        } catch (RuntimeException e) {
+            errors.handle(operation, e);
         }
     }
 }

@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.rentaltracker.infrastructure.Database;
+import com.rentaltracker.logging.NoOpLogger;
 import com.rentaltracker.repository.ItemRepository;
 import com.rentaltracker.repository.RentalRepository;
 import com.rentaltracker.repository.SqliteTransactor;
@@ -38,7 +39,7 @@ class ListItemScreenTest {
     void setUp() throws SQLException {
         db = new Database(tempDir.resolve("test.db").toString());
         items = new ItemService(new ItemRepository(db.connection()), new RentalRepository(db),
-                new UserService(new UserRepository(db)), new SqliteTransactor(db));
+                new UserService(new UserRepository(db)), new SqliteTransactor(db), new NoOpLogger());
         exec("INSERT INTO users (username, password) VALUES ('liisa', 'x'), ('meelis', 'x')");   // 1 and 2
     }
 

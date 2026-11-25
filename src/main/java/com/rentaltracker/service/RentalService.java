@@ -12,12 +12,15 @@ import com.rentaltracker.domain.enums.ItemStatus;
 import com.rentaltracker.domain.enums.RentalStatus;
 import com.rentaltracker.domain.view.ActiveRentalView;
 import com.rentaltracker.domain.view.ListingView;
+import com.rentaltracker.logging.AppLogger;
+import com.rentaltracker.logging.LogEvents;
 import com.rentaltracker.repository.ItemRepository;
 import com.rentaltracker.repository.RentalRepository;
 import com.rentaltracker.repository.Transactor;
 import com.rentaltracker.repository.exception.NotFoundException;
 import com.rentaltracker.repository.exception.SqlExceptionTranslator;
 import com.rentaltracker.service.exception.BusinessRuleException;
+import com.rentaltracker.service.exception.NotOwnerException;
 import com.rentaltracker.service.exception.ValidationException;
 import com.rentaltracker.service.validation.RentalValidator;
 
@@ -27,12 +30,15 @@ public class RentalService {
     private final RentalRepository rentals;
     private final Transactor tx;
     private final Clock clock;
+    private final AppLogger logger;
 
-    public RentalService(ItemRepository items, RentalRepository rentals, Transactor tx, Clock clock) {
+    public RentalService(ItemRepository items, RentalRepository rentals, Transactor tx, Clock clock,
+                         AppLogger logger) {
         this.items = items;
         this.rentals = rentals;
         this.tx = tx;
         this.clock = clock;
+        this.logger = logger;
     }
 
     // ---------- reads ----------
@@ -51,8 +57,18 @@ public class RentalService {
         return rentals.findActiveViewsByOwner(ownerId);
     }
 
-    /** One rental for its detail screen. */
-    public ActiveRentalView getRentalView(long rentalId) {
+    /**
+     * One rental for its detail screen. Only the owner of the rented item may see it,
+     * because it shows who rented what and when.
+     *
+     * @throws NotFoundException if there is no such rental
+     * @throws NotOwnerException if actorId does not own the rented item
+     */
+    public ActiveRentalView getRentalView(int actorId, long rentalId) {
+        RentalDomain rental = rentals.findById(rentalId);
+        ItemDomain item = requireItem((int) rental.itemId());
+        Ownership.requireOwner(item, actorId, "view_rental",
+                "You can only view rentals of your own items.", logger);
         return rentals.findViewById(rentalId);
     }
 
@@ -70,7 +86,7 @@ public class RentalService {
     public RentalDomain rent(int renterId, int itemId, int days) {
         RentalValidator.validateDays(days);
 
-        return tx.inTransaction(() -> {
+        RentalDomain rental = tx.inTransaction(() -> {
             ItemDomain item = requireItem(itemId);
 
             if (item.getOwnerId() == renterId) {
@@ -94,19 +110,33 @@ public class RentalService {
 
             return rentals.findById(rentalId);
         });
+
+        // logged only once the transaction has committed, so the log never claims a rental that was rolled back
+        logger.info(LogEvents.RENTAL_CREATED,
+                "rental_id", rental.id(), "item_id", rental.itemId(), "renter_id", rental.renterId());
+        return rental;
     }
 
     // ---------- confirm a return ----------
 
-    /** Closes the rental. The item goes back to available, unless it was delisted while out. */
-    public ItemDomain confirmReturn(long rentalId) {
+    /**
+     * Closes the rental. The item goes back to available, unless it was delisted while out.
+     * Only the owner of the rented item may confirm it: the person who got it back, not the renter.
+     *
+     * @throws NotFoundException     if there is no such rental
+     * @throws NotOwnerException     if actorId does not own the rented item
+     * @throws BusinessRuleException if the rental is already closed
+     */
+    public ItemDomain confirmReturn(int actorId, long rentalId) {
         return tx.inTransaction(() -> {
             RentalDomain rental = rentals.findById(rentalId);
+            ItemDomain item = requireItem((int) rental.itemId());
+            Ownership.requireOwner(item, actorId, "confirm_return",
+                    "You can only confirm returns of your own items.", logger);
+
             if (rental.status() != RentalStatus.ACTIVE) {
                 throw new BusinessRuleException("Rental is already closed: " + rentalId);
             }
-
-            ItemDomain item = requireItem((int) rental.itemId());
 
             rentals.close(rentalId, now());
 

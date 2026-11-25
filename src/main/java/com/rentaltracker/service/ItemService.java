@@ -6,11 +6,13 @@ import java.util.Optional;
 
 import com.rentaltracker.domain.ItemDomain;
 import com.rentaltracker.domain.enums.ItemStatus;
+import com.rentaltracker.logging.AppLogger;
 import com.rentaltracker.repository.ItemRepository;
 import com.rentaltracker.repository.RentalRepository;
 import com.rentaltracker.repository.Transactor;
 import com.rentaltracker.repository.exception.NotFoundException;
 import com.rentaltracker.service.exception.BusinessRuleException;
+import com.rentaltracker.service.exception.NotOwnerException;
 
 public class ItemService {
 
@@ -18,13 +20,15 @@ public class ItemService {
     private final RentalRepository rentals;
     private final UserService users;
     private final Transactor tx;
+    private final AppLogger logger;
 
     public ItemService(ItemRepository itemRepository, RentalRepository rentals,
-                       UserService users, Transactor tx) {
+                       UserService users, Transactor tx, AppLogger logger) {
         this.itemRepository = itemRepository;
         this.rentals = rentals;
         this.users = users;
         this.tx = tx;
+        this.logger = logger;
     }
 
     // ---------- create ----------
@@ -75,20 +79,35 @@ public class ItemService {
 
     // ---------- status changes ----------
 
-    /** Available or rented becomes unlisted. A rented item stays out until it is returned. */
-    public ItemDomain delist(int itemId) {
+    /**
+     * Available or rented becomes unlisted. A rented item stays out until it is returned.
+     * Only the owner may do this, whatever the screen offered.
+     *
+     * @throws NotOwnerException if actorId does not own the item
+     */
+    public ItemDomain delist(int actorId, int itemId) {
         return tx.inTransaction(() -> {
             ItemDomain item = requireItemById(itemId);
+            Ownership.requireOwner(item, actorId, "delist",
+                    "You can only delist your own items.", logger);
             moveTo(item, ItemStatus.unlisted);
             itemRepository.update(item);
             return item;
         });
     }
 
-    /** Unlisted becomes available, unless the item is still out on a rental. */
-    public ItemDomain relist(int itemId) {
+    /**
+     * Unlisted becomes available, unless the item is still out on a rental.
+     * Only the owner may do this, and ownership is checked before anything about the
+     * item's state is revealed.
+     *
+     * @throws NotOwnerException if actorId does not own the item
+     */
+    public ItemDomain relist(int actorId, int itemId) {
         return tx.inTransaction(() -> {
             ItemDomain item = requireItemById(itemId);
+            Ownership.requireOwner(item, actorId, "relist",
+                    "You can only relist your own items.", logger);
             if (rentals.findActiveByItem(itemId).isPresent()) {
                 throw new BusinessRuleException(
                         "Item is still out on a rental. Confirm the return first: " + item.getItemName());

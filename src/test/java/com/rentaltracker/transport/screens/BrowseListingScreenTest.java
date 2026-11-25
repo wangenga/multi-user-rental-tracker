@@ -23,6 +23,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.rentaltracker.domain.view.ListingView;
 import com.rentaltracker.infrastructure.Database;
+import com.rentaltracker.logging.NoOpLogger;
 import com.rentaltracker.repository.ItemRepository;
 import com.rentaltracker.repository.RentalRepository;
 import com.rentaltracker.repository.SqliteTransactor;
@@ -49,7 +50,7 @@ class BrowseListingScreenTest {
     void setUp() throws SQLException {
         db = new Database(tempDir.resolve("test.db").toString());
         rentals = new RentalService(new ItemRepository(db.connection()), new RentalRepository(db),
-                new SqliteTransactor(db), CLOCK);
+                new SqliteTransactor(db), CLOCK, new NoOpLogger());
         exec("INSERT INTO users (username, password) VALUES ('liisa', 'x'), ('meelis', 'x'), ('marili', 'x')");
     }
 

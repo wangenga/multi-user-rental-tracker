@@ -1,6 +1,10 @@
 package com.rentaltracker;
 
 import org.junit.jupiter.api.Test;
+
+import com.rentaltracker.logging.AppLogger;
+import com.rentaltracker.logging.CapturingLogger;
+import com.rentaltracker.logging.LogEvents;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.api.parallel.Resources;
@@ -165,6 +169,40 @@ class MainTest {
         String printed = buf.toString(StandardCharsets.UTF_8);
         assertTrue(printed.contains("Cannot run the app:"),
                 "expected failure message, got: " + printed);
+    }
+
+    @Test
+    void anUnopenableDatabaseShowsOnePlainLineAndLogsTheDetail(@TempDir Path tmp) throws IOException {
+        Path db = tmp.resolve("as-directory.db");
+        Files.createDirectories(db);
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        CapturingLogger logger = new CapturingLogger();
+
+        Main.run(db.toString(), in(""), out(buf), FIXED, logger);
+
+        String printed = buf.toString(StandardCharsets.UTF_8);
+        assertEquals(Main.CANNOT_OPEN + System.lineSeparator(), printed);
+        assertFalse(printed.contains(db.toString()), "the user should not see internal paths");
+        assertTrue(logger.has(AppLogger.Level.ERROR, LogEvents.DB_OPEN_FAILED));
+        var fields = logger.entries().get(0).fields();
+        assertEquals(db.toString(), fields.get("path"));
+        assertTrue(fields.get("detail").contains("| cause:"), fields.get("detail"));
+    }
+
+    @Test
+    void anUncreatableDataFolderIsLoggedTheSameWay(@TempDir Path tmp) throws IOException {
+        Path blocker = tmp.resolve("blocker");
+        Files.writeString(blocker, "not a directory");
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        CapturingLogger logger = new CapturingLogger();
+
+        Main.run(blocker.resolve("local.db").toString(), in(""), out(buf), FIXED, logger);
+
+        assertEquals(Main.CANNOT_OPEN + System.lineSeparator(), buf.toString(StandardCharsets.UTF_8));
+        assertTrue(logger.has(AppLogger.Level.ERROR, LogEvents.DB_OPEN_FAILED));
+        var fields = logger.entries().get(0).fields();
+        assertTrue(fields.get("exception").startsWith("java.nio.file."), fields.toString());   // an IOException subtype
+        assertTrue(fields.get("detail").contains("blocker"), fields.toString());
     }
 
     // ---------------------------------------------------------------------

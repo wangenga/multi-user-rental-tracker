@@ -18,10 +18,13 @@ public final class LogEvents {
     // failures
     public static final String VALIDATION_FAILED = "validation.failed";
     public static final String RULE_VIOLATION = "rule.violated";
+    public static final String OWNERSHIP_DENIED = "ownership.denied";
+    public static final String RECORD_MISSING = "record.missing";
     public static final String DB_ERROR = "db.query";
     public static final String UNEXPECTED = "app.unexpected";
 
     // resource lifecycle
     public static final String DB_OPENED = "db.opened";
+    public static final String DB_OPEN_FAILED = "db.open_failed";
     public static final String DB_CLOSED = "db.closed";
 }

@@ -36,12 +36,12 @@ public class InventoryScreen {
             if (picked.isEmpty()) {
                 return;
             }
-            showDetail(picked.get().getItemId());
+            showDetail(picked.get().getItemId(), session);
         }
     }
 
     /** Shows the item's details and the owner's username, with an option to delist or relist it. */
-    private void showDetail(int itemId) {
+    private void showDetail(int itemId, Session session) {
         ItemDetail detail = items.getItemDetail(itemId);
         ItemDomain item = detail.item();
 
@@ -59,13 +59,19 @@ public class InventoryScreen {
         if (prompter.askChoice("> ", 1, 2) == 2) {
             return;
         }
-        changeStatus(item, unlisted);
+        changeStatus(item, unlisted, session);
     }
 
-    /** Relists an unlisted item, or delists any other. A refused change is shown and the user stays in the screen. */
-    private void changeStatus(ItemDomain item, boolean relist) {
+    /**
+     * Relists an unlisted item, or delists any other. The service checks the logged-in user
+     * owns it. A refused change is shown and the user stays in the screen.
+     */
+    private void changeStatus(ItemDomain item, boolean relist, Session session) {
+        int actorId = session.userId();
         try {
-            ItemDomain updated = relist ? items.relist(item.getItemId()) : items.delist(item.getItemId());
+            ItemDomain updated = relist
+                    ? items.relist(actorId, item.getItemId())
+                    : items.delist(actorId, item.getItemId());
             prompter.println(updated.getItemName() + " is now " + updated.getStatus() + ".");
         } catch (BusinessRuleException e) {
             prompter.println(e.getMessage());

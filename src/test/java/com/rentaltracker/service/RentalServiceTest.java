@@ -25,12 +25,16 @@ import com.rentaltracker.domain.enums.ItemStatus;
 import com.rentaltracker.domain.enums.RentalStatus;
 import com.rentaltracker.domain.view.ListingView;
 import com.rentaltracker.infrastructure.Database;
+import com.rentaltracker.logging.AppLogger;
+import com.rentaltracker.logging.CapturingLogger;
+import com.rentaltracker.logging.LogEvents;
 import com.rentaltracker.repository.ItemRepository;
 import com.rentaltracker.repository.RentalRepository;
 import com.rentaltracker.repository.SqliteTransactor;
 import com.rentaltracker.repository.exception.NotFoundException;
 import com.rentaltracker.repository.exception.RepositoryException;
 import com.rentaltracker.service.exception.BusinessRuleException;
+import com.rentaltracker.service.exception.NotOwnerException;
 import com.rentaltracker.service.exception.ValidationException;
 
 class RentalServiceTest {
@@ -47,13 +51,14 @@ class RentalServiceTest {
     ItemRepository items;
     RentalRepository rentals;
     RentalService service;
+    CapturingLogger logger = new CapturingLogger();
 
     @BeforeEach
     void setUp() throws SQLException {
         db = new Database(tempDir.resolve("test.db").toString());
         items = new ItemRepository(db.connection());
         rentals = new RentalRepository(db);
-        service = new RentalService(items, rentals, new SqliteTransactor(db), CLOCK);
+        service = new RentalService(items, rentals, new SqliteTransactor(db), CLOCK, logger);
 
         // user 1 = owner, 2 = renter, 3 = second owner
         exec("INSERT INTO users (username, password) VALUES ('liisa', 'x'), ('meelis', 'x'), ('marili', 'x')");
@@ -110,7 +115,7 @@ class RentalServiceTest {
         long itemId = addItem(1, "Ladder", ItemStatus.rented);
         long rentalId = addActiveRental(itemId, END);
 
-        ItemDomain result = service.confirmReturn(rentalId);
+        ItemDomain result = service.confirmReturn(1, rentalId);
 
         assertEquals("closed", rentalStatus(rentalId));
         assertEquals("2026-06-16 14:30", returnedAt(rentalId));
@@ -123,7 +128,7 @@ class RentalServiceTest {
         long itemId = addItem(1, "Ladder", ItemStatus.unlisted);
         long rentalId = addActiveRental(itemId, END);
 
-        service.confirmReturn(rentalId);
+        service.confirmReturn(1, rentalId);
 
         assertEquals("closed", rentalStatus(rentalId));
         assertEquals("unlisted", itemStatus(itemId));
@@ -134,7 +139,7 @@ class RentalServiceTest {
         long itemId = addItem(1, "Ladder", ItemStatus.rented);
         long rentalId = addActiveRental(itemId, END);
 
-        service.confirmReturn(rentalId);
+        service.confirmReturn(1, rentalId);
 
         assertEquals("1", rentalCount());
     }
@@ -143,9 +148,9 @@ class RentalServiceTest {
     void confirmReturnTwiceIsRejectedAndChangesNothing() throws SQLException {
         long itemId = addItem(1, "Ladder", ItemStatus.rented);
         long rentalId = addActiveRental(itemId, END);
-        service.confirmReturn(rentalId);
+        service.confirmReturn(1, rentalId);
 
-        assertThrows(BusinessRuleException.class, () -> service.confirmReturn(rentalId));
+        assertThrows(BusinessRuleException.class, () -> service.confirmReturn(1, rentalId));
 
         assertEquals("closed", rentalStatus(rentalId));
         assertEquals("available", itemStatus(itemId));
@@ -153,7 +158,7 @@ class RentalServiceTest {
 
     @Test
     void confirmReturnOnAMissingRentalThrowsNotFound() {
-        assertThrows(NotFoundException.class, () -> service.confirmReturn(999));
+        assertThrows(NotFoundException.class, () -> service.confirmReturn(1, 999));
     }
 
     @Test
@@ -164,7 +169,7 @@ class RentalServiceTest {
         exec("CREATE TRIGGER block_item_updates BEFORE UPDATE ON listed_items "
            + "BEGIN SELECT RAISE(ABORT, 'blocked'); END");
 
-        assertThrows(RepositoryException.class, () -> service.confirmReturn(rentalId));
+        assertThrows(RepositoryException.class, () -> service.confirmReturn(1, rentalId));
 
         assertEquals("active", rentalStatus(rentalId));
         assertNull(returnedAt(rentalId));
@@ -326,5 +331,108 @@ class RentalServiceTest {
 
         assertEquals("0", rentalCount());          // the rental insert was undone
         assertEquals("available", itemStatus(itemId));
+        assertFalse(logger.has(AppLogger.Level.INFO, LogEvents.RENTAL_CREATED),
+                "a rolled-back rental must not be logged as created");
+    }
+
+    // ---------- rental.created log entry ----------
+
+    @Test
+    void aSuccessfulRentalIsLoggedAtInfoWithItsIds() throws SQLException {
+        long itemId = addItem(1, "Ladder", ItemStatus.available);
+
+        RentalDomain rental = service.rent(2, (int) itemId, 3);
+
+        assertTrue(logger.has(AppLogger.Level.INFO, LogEvents.RENTAL_CREATED));
+        var fields = logger.entries().get(0).fields();
+        assertEquals(String.valueOf(rental.id()), fields.get("rental_id"));
+        assertEquals(String.valueOf(itemId), fields.get("item_id"));
+        assertEquals("2", fields.get("renter_id"));
+    }
+
+    @Test
+    void aRefusedRentalIsNotLoggedAsCreated() throws SQLException {
+        long itemId = addItem(1, "Ladder", ItemStatus.rented);
+
+        assertThrows(BusinessRuleException.class, () -> service.rent(2, (int) itemId, 3));
+        assertThrows(ValidationException.class, () -> service.rent(2, (int) itemId, 0));
+
+        assertFalse(logger.has(AppLogger.Level.INFO, LogEvents.RENTAL_CREATED));
+    }
+
+    // ---------- ownership: only the item's owner may see or confirm its rentals ----------
+
+    @Test
+    void theRenterCannotConfirmTheirOwnReturnAndNothingChanges() throws SQLException {
+        long itemId = addItem(1, "Ladder", ItemStatus.rented);
+        long rentalId = addActiveRental(itemId, END);   // rented by user 2
+
+        NotOwnerException e = assertThrows(NotOwnerException.class,
+                () -> service.confirmReturn(2, rentalId));
+
+        assertEquals("You can only confirm returns of your own items.", e.getMessage());
+        assertEquals("active", rentalStatus(rentalId));
+        assertNull(returnedAt(rentalId));
+        assertEquals("rented", itemStatus(itemId));
+    }
+
+    @Test
+    void anUnrelatedUserCannotConfirmAReturn() throws SQLException {
+        long itemId = addItem(1, "Ladder", ItemStatus.rented);
+        long rentalId = addActiveRental(itemId, END);
+
+        assertThrows(NotOwnerException.class, () -> service.confirmReturn(3, rentalId));
+
+        assertEquals("active", rentalStatus(rentalId));
+    }
+
+    @Test
+    void aStrangerHearsNotYoursEvenForAClosedRental() throws SQLException {
+        long itemId = addItem(1, "Ladder", ItemStatus.rented);
+        long rentalId = addActiveRental(itemId, END);
+        service.confirmReturn(1, rentalId);
+
+        // not "Rental is already closed", which would reveal something about another user's item
+        assertThrows(NotOwnerException.class, () -> service.confirmReturn(3, rentalId));
+    }
+
+    @Test
+    void aRefusedConfirmIsLoggedAtWarn() throws SQLException {
+        long itemId = addItem(1, "Ladder", ItemStatus.rented);
+        long rentalId = addActiveRental(itemId, END);
+
+        assertThrows(NotOwnerException.class, () -> service.confirmReturn(2, rentalId));
+
+        assertTrue(logger.has(AppLogger.Level.WARN, LogEvents.OWNERSHIP_DENIED));
+        var fields = logger.entries().get(0).fields();
+        assertEquals("confirm_return", fields.get("action"));
+        assertEquals("2", fields.get("actor_id"));
+        assertEquals(String.valueOf(itemId), fields.get("item_id"));
+    }
+
+    @Test
+    void theOwnerCanViewARentalsDetails() throws SQLException {
+        long itemId = addItem(1, "Ladder", ItemStatus.rented);
+        long rentalId = addActiveRental(itemId, END);
+
+        var view = service.getRentalView(1, rentalId);
+
+        assertEquals(rentalId, view.rentalId());
+        assertEquals("Ladder", view.itemName());
+        assertEquals("meelis", view.renterUsername());
+    }
+
+    @Test
+    void nobodyElseCanViewARentalsDetails() throws SQLException {
+        long itemId = addItem(1, "Ladder", ItemStatus.rented);
+        long rentalId = addActiveRental(itemId, END);
+
+        assertThrows(NotOwnerException.class, () -> service.getRentalView(2, rentalId));
+        assertThrows(NotOwnerException.class, () -> service.getRentalView(3, rentalId));
+    }
+
+    @Test
+    void viewingAMissingRentalThrowsNotFound() {
+        assertThrows(NotFoundException.class, () -> service.getRentalView(1, 999));
     }
 }

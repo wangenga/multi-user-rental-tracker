@@ -22,6 +22,9 @@ import com.rentaltracker.domain.RentalDomain;
 import com.rentaltracker.domain.enums.ItemStatus;
 import com.rentaltracker.domain.enums.RentalStatus;
 import com.rentaltracker.infrastructure.Database;
+import com.rentaltracker.logging.AppLogger;
+import com.rentaltracker.logging.CapturingLogger;
+import com.rentaltracker.logging.LogEvents;
 import com.rentaltracker.repository.ItemRepository;
 import com.rentaltracker.repository.RentalRepository;
 import com.rentaltracker.repository.SqliteTransactor;
@@ -29,6 +32,7 @@ import com.rentaltracker.repository.UserRepository;
 import com.rentaltracker.repository.exception.ConstraintViolationException;
 import com.rentaltracker.repository.exception.NotFoundException;
 import com.rentaltracker.service.exception.BusinessRuleException;
+import com.rentaltracker.service.exception.NotOwnerException;
 
 class ItemServiceTest {
 
@@ -39,13 +43,14 @@ class ItemServiceTest {
     Database db;
     RentalRepository rentals;
     ItemService service;
+    CapturingLogger logger = new CapturingLogger();
 
     @BeforeEach
     void setUp() throws SQLException {
         db = new Database(tempDir.resolve("test.db").toString());
         rentals = new RentalRepository(db);
         service = new ItemService(new ItemRepository(db.connection()), rentals,
-                new UserService(new UserRepository(db)), new SqliteTransactor(db));
+                new UserService(new UserRepository(db)), new SqliteTransactor(db), logger);
         // 1 = owner, 2 = renter, 3 = a second owner
         exec("INSERT INTO users (username, password) VALUES ('liisa', 'x'), ('meelis', 'x'), ('marili', 'x')");
     }
@@ -215,7 +220,7 @@ class ItemServiceTest {
     void delistMakesAnAvailableItemUnlisted() throws SQLException {
         long id = addItem(1, "Ladder", ItemStatus.available);
 
-        service.delist((int) id);
+        service.delist(1, (int) id);
 
         assertEquals("unlisted", itemStatus(id));
     }
@@ -225,7 +230,7 @@ class ItemServiceTest {
         long id = addItem(1, "Ladder", ItemStatus.rented);
         long rentalId = addActiveRental(id);
 
-        service.delist((int) id);
+        service.delist(1, (int) id);
 
         assertEquals("unlisted", itemStatus(id));
         assertEquals("active", query("SELECT status FROM rentals WHERE rental_id = " + rentalId));
@@ -235,14 +240,14 @@ class ItemServiceTest {
     void delistingAnUnlistedItemIsRejected() throws SQLException {
         long id = addItem(1, "Ladder", ItemStatus.unlisted);
 
-        assertThrows(BusinessRuleException.class, () -> service.delist((int) id));
+        assertThrows(BusinessRuleException.class, () -> service.delist(1, (int) id));
 
         assertEquals("unlisted", itemStatus(id));
     }
 
     @Test
     void delistingAMissingItemThrowsNotFound() {
-        assertThrows(NotFoundException.class, () -> service.delist(999));
+        assertThrows(NotFoundException.class, () -> service.delist(1, 999));
     }
 
     // ---------- relist ----------
@@ -251,7 +256,7 @@ class ItemServiceTest {
     void relistMakesAnUnlistedItemAvailable() throws SQLException {
         long id = addItem(1, "Ladder", ItemStatus.unlisted);
 
-        service.relist((int) id);
+        service.relist(1, (int) id);
 
         assertEquals("available", itemStatus(id));
     }
@@ -261,7 +266,7 @@ class ItemServiceTest {
         long id = addItem(1, "Ladder", ItemStatus.unlisted);
         addActiveRental(id);
 
-        assertThrows(BusinessRuleException.class, () -> service.relist((int) id));
+        assertThrows(BusinessRuleException.class, () -> service.relist(1, (int) id));
 
         assertEquals("unlisted", itemStatus(id));
     }
@@ -272,7 +277,7 @@ class ItemServiceTest {
         long rentalId = addActiveRental(id);
         rentals.close(rentalId, LocalDateTime.of(2026, 6, 12, 9, 0));
 
-        service.relist((int) id);
+        service.relist(1, (int) id);
 
         assertEquals("available", itemStatus(id));
     }
@@ -281,6 +286,68 @@ class ItemServiceTest {
     void relistingAnAvailableItemIsRejected() throws SQLException {
         long id = addItem(1, "Ladder", ItemStatus.available);
 
-        assertThrows(BusinessRuleException.class, () -> service.relist((int) id));
+        assertThrows(BusinessRuleException.class, () -> service.relist(1, (int) id));
+    }
+
+    // ---------- ownership: only the owner may delist or relist ----------
+
+    @Test
+    void aUserCannotDelistSomeoneElsesItemAndNothingChanges() throws SQLException {
+        long id = addItem(1, "Ladder", ItemStatus.available);
+
+        NotOwnerException e = assertThrows(NotOwnerException.class, () -> service.delist(2, (int) id));
+
+        assertEquals("You can only delist your own items.", e.getMessage());
+        assertEquals("available", itemStatus(id));
+    }
+
+    @Test
+    void aUserCannotRelistSomeoneElsesItemAndNothingChanges() throws SQLException {
+        long id = addItem(1, "Ladder", ItemStatus.unlisted);
+
+        NotOwnerException e = assertThrows(NotOwnerException.class, () -> service.relist(3, (int) id));
+
+        assertEquals("You can only relist your own items.", e.getMessage());
+        assertEquals("unlisted", itemStatus(id));
+    }
+
+    @Test
+    void ownershipIsCheckedBeforeTheItemsStateIsRevealed() throws SQLException {
+        // a stranger relisting an item that is still out must hear "not yours", not "still out on a rental"
+        long id = addItem(1, "Ladder", ItemStatus.unlisted);
+        addActiveRental(id);
+
+        assertThrows(NotOwnerException.class, () -> service.relist(2, (int) id));
+        // and delisting an already-unlisted item: "not yours", not "cannot change from unlisted"
+        assertThrows(NotOwnerException.class, () -> service.delist(2, (int) id));
+    }
+
+    @Test
+    void aNotOwnerRefusalIsABusinessRuleSoEveryExistingCatchHandlesIt() throws SQLException {
+        long id = addItem(1, "Ladder", ItemStatus.available);
+
+        assertThrows(BusinessRuleException.class, () -> service.delist(2, (int) id));
+    }
+
+    @Test
+    void aRefusedAttemptIsLoggedAtWarnWithWhoTriedWhatOnWhichItem() throws SQLException {
+        long id = addItem(1, "Ladder", ItemStatus.available);
+
+        assertThrows(NotOwnerException.class, () -> service.delist(2, (int) id));
+
+        assertTrue(logger.has(AppLogger.Level.WARN, LogEvents.OWNERSHIP_DENIED));
+        var fields = logger.entries().get(0).fields();
+        assertEquals("delist", fields.get("action"));
+        assertEquals("2", fields.get("actor_id"));
+        assertEquals(String.valueOf(id), fields.get("item_id"));
+    }
+
+    @Test
+    void theOwnerIsNotLoggedAsDenied() throws SQLException {
+        long id = addItem(1, "Ladder", ItemStatus.available);
+
+        service.delist(1, (int) id);
+
+        assertTrue(logger.entries().isEmpty());
     }
 }
