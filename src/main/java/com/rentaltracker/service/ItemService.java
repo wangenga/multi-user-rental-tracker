@@ -11,6 +11,8 @@ import com.rentaltracker.repository.RentalRepository;
 import com.rentaltracker.repository.Transactor;
 import com.rentaltracker.repository.exception.NotFoundException;
 import com.rentaltracker.service.exception.BusinessRuleException;
+import com.rentaltracker.service.exception.ValidationException;
+import com.rentaltracker.service.validation.ItemValidator;
 
 public class ItemService {
 
@@ -29,16 +31,23 @@ public class ItemService {
 
     // ---------- create ----------
 
-    /** Listing an item makes it available. */
+    /**
+     * Listing an item makes it available.
+     * Every field is checked by ItemValidator first, so a rejected input never reaches the database.
+     *
+     * @throws ValidationException if any field breaks a rule (blank name, negative cost, ...)
+     */
     public ItemDomain createItem(int ownerId, String itemName, String description, int costPerDay) {
-        validateOwnerId(ownerId);
-        validateItemName(itemName);
-        validateCostPerDay(costPerDay);
+        ItemValidator.validateOwnerId(ownerId);
+        // The validator returns the cleaned-up (trimmed) text, so we store exactly what was checked
+        String name = ItemValidator.validateName(itemName);
+        String cleanDescription = ItemValidator.validateDescription(description);
+        ItemValidator.validateCostPerDay(costPerDay);
 
         ItemDomain item = new ItemDomain();
         item.setOwnerId(ownerId);
-        item.setItemName(itemName.trim());
-        item.setDescription(description == null ? "" : description.trim());
+        item.setItemName(name);
+        item.setDescription(cleanDescription);
         item.setCostPerDay(costPerDay);
         item.setStatus(ItemStatus.available);
         item.setCreatedAt(LocalDateTime.now());
@@ -49,8 +58,9 @@ public class ItemService {
 
     // ---------- read ----------
 
+    /** Empty when no item has this id. An impossible id (0 or less) is rejected before the lookup. */
     public Optional<ItemDomain> getItemById(int itemId) {
-        validateItemId(itemId);
+        ItemValidator.validateItemId(itemId);
         return itemRepository.findByItemId(itemId);
     }
 
@@ -59,8 +69,9 @@ public class ItemService {
                 .orElseThrow(() -> new NotFoundException("Item not found: " + itemId));
     }
 
+    /** All items listed by this owner, whatever their status. */
     public List<ItemDomain> getItemsByOwner(int ownerId) {
-        validateOwnerId(ownerId);
+        ItemValidator.validateOwnerId(ownerId);
         return itemRepository.findAll().stream()
                 .filter(i -> i.getOwnerId() == ownerId)
                 .toList();
@@ -105,28 +116,5 @@ public class ItemService {
                     "Cannot change " + item.getItemName() + " from " + item.getStatus() + " to " + next);
         }
         item.setStatus(next);
-    }
-
-    // ---------- validation ----------
-
-    private void validateItemId(int itemId) {
-        if (itemId <= 0) throw new IllegalArgumentException("itemId must be positive");
-    }
-
-    private void validateOwnerId(int ownerId) {
-        if (ownerId <= 0) throw new IllegalArgumentException("ownerId must be positive");
-    }
-
-    private void validateItemName(String itemName) {
-        if (itemName == null || itemName.isBlank()) {
-            throw new IllegalArgumentException("Item name cannot be blank");
-        }
-        if (itemName.trim().length() > 100) {
-            throw new IllegalArgumentException("Item name too long (max 100 chars)");
-        }
-    }
-
-    private void validateCostPerDay(int costPerDay) {
-        if (costPerDay < 1) throw new IllegalArgumentException("costPerDay cannot be negative");
     }
 }
