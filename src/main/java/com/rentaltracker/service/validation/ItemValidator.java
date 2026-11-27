@@ -21,6 +21,8 @@ public final class ItemValidator {
 
     public static final int MAX_NAME_LENGTH = 100;
     public static final int MAX_DESCRIPTION_LENGTH = 500;
+    // Team decision: listing for free is not allowed, so the lowest valid price is 1 per day
+    public static final int MIN_COST_PER_DAY = 1;
 
     // Only static methods, so nobody should create an instance
     private ItemValidator() {}
@@ -56,6 +58,19 @@ public final class ItemValidator {
                     "Description must not exceed " + MAX_DESCRIPTION_LENGTH + " characters");
         }
         return description;
+    }
+
+    /**
+     * Negative and zero are both rejected, but with different reasons, so the log
+     * tells us which mistake the user made (reason=negative vs reason=too_low).
+     */
+    public static void validateCostPerDay(int costPerDay) {
+        if (costPerDay < 0) {
+            throw invalid("cost", "negative", "Cost per day cannot be negative");
+        }
+        if (costPerDay < MIN_COST_PER_DAY) {
+            throw invalid("cost", "too_low", "Cost per day must be at least " + MIN_COST_PER_DAY);
+        }
     }
 
     // Every failure in this class is about an Item, so the entity name is filled in once here
