@@ -58,8 +58,9 @@ public class ItemService {
 
     // ---------- read ----------
 
+    /** Empty when no item has this id. An impossible id (0 or less) is rejected before the lookup. */
     public Optional<ItemDomain> getItemById(int itemId) {
-        validateItemId(itemId);
+        ItemValidator.validateItemId(itemId);
         return itemRepository.findByItemId(itemId);
     }
 
@@ -68,8 +69,9 @@ public class ItemService {
                 .orElseThrow(() -> new NotFoundException("Item not found: " + itemId));
     }
 
+    /** All items listed by this owner, whatever their status. */
     public List<ItemDomain> getItemsByOwner(int ownerId) {
-        validateOwnerId(ownerId);
+        ItemValidator.validateOwnerId(ownerId);
         return itemRepository.findAll().stream()
                 .filter(i -> i.getOwnerId() == ownerId)
                 .toList();
@@ -114,15 +116,5 @@ public class ItemService {
                     "Cannot change " + item.getItemName() + " from " + item.getStatus() + " to " + next);
         }
         item.setStatus(next);
-    }
-
-    // ---------- validation ----------
-
-    private void validateItemId(int itemId) {
-        if (itemId <= 0) throw new IllegalArgumentException("itemId must be positive");
-    }
-
-    private void validateOwnerId(int ownerId) {
-        if (ownerId <= 0) throw new IllegalArgumentException("ownerId must be positive");
     }
 }
