@@ -20,6 +20,7 @@ import com.rentaltracker.service.exception.ValidationException;
 public final class ItemValidator {
 
     public static final int MAX_NAME_LENGTH = 100;
+    public static final int MAX_DESCRIPTION_LENGTH = 500;
 
     // Only static methods, so nobody should create an instance
     private ItemValidator() {}
@@ -40,6 +41,21 @@ public final class ItemValidator {
                     "Item name must not exceed " + MAX_NAME_LENGTH + " characters");
         }
         return name;
+    }
+
+    /**
+     * The description is optional. A missing one (null) is stored as empty text,
+     * but a very long one is rejected so a single listing cannot flood the screen.
+     *
+     * @return the trimmed description, or "" when none was given
+     */
+    public static String validateDescription(String raw) {
+        String description = raw == null ? "" : raw.trim();
+        if (description.length() > MAX_DESCRIPTION_LENGTH) {
+            throw invalid("description", "too_long",
+                    "Description must not exceed " + MAX_DESCRIPTION_LENGTH + " characters");
+        }
+        return description;
     }
 
     // Every failure in this class is about an Item, so the entity name is filled in once here
