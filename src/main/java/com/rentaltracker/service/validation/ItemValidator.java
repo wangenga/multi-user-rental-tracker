@@ -73,6 +73,17 @@ public final class ItemValidator {
         }
     }
 
+    /**
+     * Database ids start at 1, so 0 or less can never point at a real item.
+     * Catching it here saves a pointless database lookup. Whether a positive id
+     * actually exists is a bad reference, which the service checks (NotFoundException).
+     */
+    public static void validateItemId(int itemId) {
+        if (itemId <= 0) {
+            throw invalid("item_id", "not_positive", "Item ID must be greater than zero");
+        }
+    }
+
     // Every failure in this class is about an Item, so the entity name is filled in once here
     private static ValidationException invalid(String field, String reason, String message) {
         return new ValidationException("Item", field, reason, message);
