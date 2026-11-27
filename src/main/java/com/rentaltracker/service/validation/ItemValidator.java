@@ -84,6 +84,18 @@ public final class ItemValidator {
         }
     }
 
+    /**
+     * Same rule for the owner: 0 or less can never be a real user.
+     * The owner id normally comes from the logged-in session, so this guards against
+     * a caller that skips the session. Whether the user exists is left to the
+     * foreign key on listed_items.owner_id.
+     */
+    public static void validateOwnerId(int ownerId) {
+        if (ownerId <= 0) {
+            throw invalid("owner_id", "not_positive", "Owner ID must be greater than zero");
+        }
+    }
+
     // Every failure in this class is about an Item, so the entity name is filled in once here
     private static ValidationException invalid(String field, String reason, String message) {
         return new ValidationException("Item", field, reason, message);
